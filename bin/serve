@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+HOST="${SYMFONY_HOST:-0.0.0.0}"
+PORT="${SYMFONY_PORT:-8000}"
+
+echo "Symfony escuchando en http://${HOST}:${PORT}"
+echo "Acceso local: http://127.0.0.1:${PORT}"
+echo "Acceso en red (ejemplos):"
+hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.' | while read -r ip; do
+  echo "  http://${ip}:${PORT}"
+done
+
+exec php -S "${HOST}:${PORT}" -t public public/router.php

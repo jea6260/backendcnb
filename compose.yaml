@@ -1,0 +1,47 @@
+services:
+  database:
+    image: postgres:16-alpine
+    container_name: cnb-database
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: CNBDB
+      POSTGRES_USER: cnb_user
+      POSTGRES_PASSWORD: cnb_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d CNBDB -U cnb_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - database_data:/var/lib/postgresql/data:rw
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5433:5432"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cnb-app
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      APP_ENV: dev
+      APP_DEBUG: "1"
+      APP_SECRET: change_me_cnb_docker_dev_secret_32b
+      DEFAULT_URI: http://localhost:8000
+      DATABASE_URL: postgresql://cnb_user:cnb_password@database:5432/CNBDB?serverVersion=16&charset=utf8
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/var/www/html
+      - cnb_vendor:/var/www/html/vendor
+      - cnb_var:/var/www/html/var
+
+volumes:
+  database_data:
+  cnb_vendor:
+  cnb_var:

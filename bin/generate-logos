@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+SRC="${1:-../CNB80_logo.jpeg}"
+OUT="public/images"
+VENV="/tmp/cnb-imgvenv"
+
+if [[ ! -f "$SRC" ]]; then
+  echo "No se encontro el logo: $SRC" >&2
+  exit 1
+fi
+
+python3 -m venv "$VENV"
+"$VENV/bin/pip" install -q Pillow
+
+"$VENV/bin/python3" - "$SRC" "$OUT" <<'PY'
+import sys
+from pathlib import Path
+from PIL import Image
+
+src = Path(sys.argv[1])
+out = Path(sys.argv[2])
+out.mkdir(parents=True, exist_ok=True)
+
+img = Image.open(src).convert('RGB')
+sizes = {
+    'cnb_logo-32.jpg': 32,
+    'cnb_logo-48.jpg': 48,
+    'cnb_logo-96.jpg': 96,
+    'cnb_logo-192.jpg': 192,
+}
+
+for name, size in sizes.items():
+    resized = img.copy()
+    resized.thumbnail((size, size), Image.Resampling.LANCZOS)
+    canvas = Image.new('RGB', (size, size), (0, 33, 71))
+    x = (size - resized.width) // 2
+    y = (size - resized.height) // 2
+    canvas.paste(resized, (x, y))
+    canvas.save(out / name, 'JPEG', quality=90, optimize=True)
+    print(f'Generado {name}')
+
+img.save(out / 'cnb_logo-full.jpg', 'JPEG', quality=92, optimize=True)
+print('Listo.')
+PY

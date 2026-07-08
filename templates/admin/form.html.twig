@@ -1,0 +1,63 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ id ? 'Editar' : 'Nuevo' }} {{ definition.singular }} - CNB{% endblock %}
+
+{% block body %}
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h1 class="h3 mb-1">{{ id ? 'Editar' : 'Nuevo' }} {{ definition.singular }}</h1>
+            <p class="text-muted mb-0">{{ definition.description }}</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="{{ path('admin_resource_index', {resource: resource}) }}">Volver</a>
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form method="post" class="row g-3">
+                {% for name, field in fields %}
+                    {% set value = attribute(data, name) is defined ? attribute(data, name) : field.default|default('') %}
+                    <div class="{{ field.type == 'textarea' ? 'col-12' : 'col-12 col-md-6' }}">
+                        {% if field.type == 'boolean' %}
+                            <div class="form-check mt-4">
+                                <input type="checkbox" class="form-check-input" id="{{ name }}" name="{{ name }}" value="1" {% if value %}checked{% endif %}>
+                                <label class="form-check-label" for="{{ name }}">{{ field.label }}</label>
+                            </div>
+                        {% else %}
+                            <label class="form-label" for="{{ name }}">{{ field.label }}</label>
+
+                            {% if field.type == 'choice' %}
+                                <select class="form-select" id="{{ name }}" name="{{ name }}" {% if field.required|default(false) %}required{% endif %}>
+                                    {% for optionValue, optionLabel in field.choices %}
+                                        <option value="{{ optionValue }}" {% if value == optionValue %}selected{% endif %}>{{ optionLabel }}</option>
+                                    {% endfor %}
+                                </select>
+                            {% elseif field.type == 'relation' %}
+                                <select class="form-select" id="{{ name }}" name="{{ name }}" {% if field.required|default(false) %}required{% endif %}>
+                                    <option value="">Sin asignar</option>
+                                    {% for option in relations[name] %}
+                                        <option value="{{ option.id }}" {% if value == option.id %}selected{% endif %}>{{ option.label }}</option>
+                                    {% endfor %}
+                                </select>
+                            {% elseif field.type == 'textarea' %}
+                                <textarea class="form-control" id="{{ name }}" name="{{ name }}" rows="4" {% if field.required|default(false) %}required{% endif %}>{{ value }}</textarea>
+                            {% else %}
+                                {% set inputType = field.type == 'datetime' ? 'datetime-local' : (field.type == 'decimal' ? 'number' : field.type) %}
+                                {% set inputValue = field.type == 'datetime' and value ? value|slice(0, 16) : value %}
+                                <input class="form-control" id="{{ name }}" name="{{ name }}" type="{{ inputType }}" value="{{ inputValue }}" {% if field.type == 'decimal' %}step="0.01"{% endif %} {% if field.required|default(false) %}required{% endif %}>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                {% endfor %}
+
+                <div class="col-12 d-flex gap-2">
+                    <button class="btn btn-primary" type="submit">Guardar</button>
+                    <a class="btn btn-outline-secondary" href="{{ path('admin_resource_index', {resource: resource}) }}">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}

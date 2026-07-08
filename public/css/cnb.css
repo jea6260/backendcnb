@@ -1,0 +1,142 @@
+:root {
+    --cnb-navy: #002147;
+    --cnb-navy-dark: #001428;
+    --cnb-silver: #c0c0c0;
+    --cnb-silver-light: #e8e8e8;
+    --cnb-surface: #f0f4f8;
+
+    --bs-primary: var(--cnb-navy);
+    --bs-primary-rgb: 0, 33, 71;
+    --bs-secondary: #6c7a89;
+    --bs-secondary-rgb: 108, 122, 137;
+    --bs-link-color: var(--cnb-navy);
+    --bs-link-hover-color: var(--cnb-navy-dark);
+    --bs-body-bg: var(--cnb-surface);
+    --bs-border-color: var(--cnb-silver-light);
+}
+
+body {
+    background-color: var(--cnb-surface);
+    color: var(--cnb-navy);
+}
+
+.cnb-header {
+    background: #fff;
+    border-bottom: 2px solid var(--cnb-silver);
+    padding: 0.75rem 0;
+    box-shadow: 0 2px 8px rgba(0, 33, 71, 0.06);
+}
+
+.cnb-brand {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    text-decoration: none;
+}
+
+.cnb-brand:hover {
+    text-decoration: none;
+}
+
+.cnb-brand-logo {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 2px solid var(--cnb-silver);
+    flex-shrink: 0;
+}
+
+.cnb-brand-title {
+    color: var(--cnb-navy);
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+}
+
+.cnb-header .nav-link {
+    color: var(--cnb-navy);
+    font-weight: 500;
+}
+
+.cnb-header .nav-link:hover,
+.cnb-header .nav-link:focus {
+    color: var(--cnb-navy-dark);
+}
+
+.btn-primary {
+    --bs-btn-bg: var(--cnb-navy);
+    --bs-btn-border-color: var(--cnb-navy);
+    --bs-btn-hover-bg: var(--cnb-navy-dark);
+    --bs-btn-hover-border-color: var(--cnb-navy-dark);
+    --bs-btn-active-bg: var(--cnb-navy-dark);
+    --bs-btn-active-border-color: var(--cnb-navy-dark);
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--cnb-navy);
+    --bs-btn-border-color: var(--cnb-navy);
+    --bs-btn-hover-bg: var(--cnb-navy);
+    --bs-btn-hover-border-color: var(--cnb-navy);
+    --bs-btn-active-bg: var(--cnb-navy-dark);
+    --bs-btn-active-border-color: var(--cnb-navy-dark);
+}
+
+.card {
+    border-color: var(--cnb-silver-light);
+}
+
+.card .badge.text-bg-secondary {
+    background-color: var(--cnb-navy) !important;
+}
+
+.table thead.table-light {
+    --bs-table-bg: #fff;
+    border-bottom: 2px solid var(--cnb-silver-light);
+}
+
+.cnb-sort-link {
+    color: var(--cnb-navy);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.cnb-sort-link:hover,
+.cnb-sort-link:focus {
+    color: var(--cnb-navy-dark);
+    text-decoration: underline;
+}
+
+.cnb-sort-indicator {
+    font-size: 0.75rem;
+    margin-left: 0.15rem;
+}
+
+.cnb-filter-row th {
+    vertical-align: middle;
+    background: #fff;
+    border-bottom: 2px solid var(--cnb-silver-light);
+}
+
+.cnb-list-table .form-control-sm {
+    min-width: 6rem;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--cnb-silver);
+    box-shadow: 0 0 0 0.2rem rgba(0, 33, 71, 0.15);
+}
+
+@media (max-width: 576px) {
+    .cnb-brand-title {
+        font-size: 1.15rem;
+    }
+
+    .cnb-brand-logo {
+        width: 56px;
+        height: 56px;
+    }
+}

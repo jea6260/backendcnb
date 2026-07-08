@@ -1,0 +1,15 @@
+.git
+.gitignore
+.idea
+.vscode
+var/cache
+var/log
+var/share
+*.md
+.env.local
+.env.*.local
+compose.override.yaml
+docker/postgres/data
+**/__pycache__
+*.pyc
+.DS_Store

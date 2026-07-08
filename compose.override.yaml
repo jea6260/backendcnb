@@ -1,0 +1,4 @@
+# Override local opcional. Compose lo mergea automaticamente con compose.yaml.
+# Si no queres montar el codigo fuente, borra o vacia este archivo.
+
+services: {}

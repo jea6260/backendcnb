@@ -1,0 +1,122 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ definition.label }} - CNB{% endblock %}
+
+{% block body %}
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h1 class="h3 mb-1">{{ definition.label }}</h1>
+            <p class="text-muted mb-0">{{ definition.description }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary" href="{{ path('admin_dashboard') }}">Volver</a>
+            <a class="btn btn-primary" href="{{ path('admin_resource_new', {resource: resource}) }}">Nuevo</a>
+        </div>
+    </div>
+
+    <form id="cnb-list-filters" method="get" action="{{ path('admin_resource_index', {resource: resource}) }}">
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="dir" value="{{ dir }}">
+    </form>
+
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 cnb-list-table">
+                <thead class="table-light">
+                    <tr>
+                        {% if show_id %}
+                            <th>
+                                <a class="cnb-sort-link" href="{{ path('admin_resource_index', {resource: resource, sort: 'id', dir: sort == 'id' and dir == 'asc' ? 'desc' : 'asc', f: filters}) }}">
+                                    ID
+                                    {% if sort == 'id' %}
+                                        <span class="cnb-sort-indicator">{{ dir == 'asc' ? '▲' : '▼' }}</span>
+                                    {% endif %}
+                                </a>
+                            </th>
+                        {% endif %}
+                        {% for name, field in fields %}
+                            <th>
+                                <a class="cnb-sort-link" href="{{ path('admin_resource_index', {resource: resource, sort: name, dir: sort == name and dir == 'asc' ? 'desc' : 'asc', f: filters}) }}">
+                                    {{ field.label }}
+                                    {% if sort == name %}
+                                        <span class="cnb-sort-indicator">{{ dir == 'asc' ? '▲' : '▼' }}</span>
+                                    {% endif %}
+                                </a>
+                            </th>
+                        {% endfor %}
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                    <tr class="cnb-filter-row">
+                        {% if show_id %}
+                            <th>
+                                <input
+                                    form="cnb-list-filters"
+                                    class="form-control form-control-sm"
+                                    type="search"
+                                    name="f[id]"
+                                    value="{{ filters.id|default('') }}"
+                                    placeholder="Buscar ID"
+                                    aria-label="Buscar por ID"
+                                >
+                            </th>
+                        {% endif %}
+                        {% for name, field in fields %}
+                            <th>
+                                <input
+                                    form="cnb-list-filters"
+                                    class="form-control form-control-sm"
+                                    type="search"
+                                    name="f[{{ name }}]"
+                                    value="{{ filters[name]|default('') }}"
+                                    placeholder="Buscar {{ field.label|lower }}"
+                                    aria-label="Buscar por {{ field.label }}"
+                                >
+                            </th>
+                        {% endfor %}
+                        <th class="text-end">
+                            <div class="d-flex justify-content-end gap-1">
+                                <button form="cnb-list-filters" class="btn btn-sm btn-primary" type="submit">Buscar</button>
+                                <a class="btn btn-sm btn-outline-secondary" href="{{ path('admin_resource_index', {resource: resource}) }}">Limpiar</a>
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            {% if show_id %}
+                                <td class="text-muted">#{{ row.id }}</td>
+                            {% endif %}
+                            {% for name, field in fields %}
+                                {% set value = attribute(row, name)|default('') %}
+                                <td>
+                                    {% if field.type == 'boolean' %}
+                                        {{ value ? 'Si' : 'No' }}
+                                    {% elseif field.type == 'choice' and field.choices[value] is defined %}
+                                        {{ field.choices[value] }}
+                                    {% else %}
+                                        {{ value }}
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                            <td class="text-end">
+                                <a class="btn btn-sm btn-outline-primary" href="{{ path('admin_resource_edit', {resource: resource, id: row.id}) }}">Editar</a>
+                                <form method="post" action="{{ path('admin_resource_delete', {resource: resource, id: row.id}) }}" class="d-inline" onsubmit="return confirm('Eliminar registro?');">
+                                    <button class="btn btn-sm btn-outline-danger" type="submit">Eliminar</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="{{ fields|length + (show_id ? 2 : 1) }}" class="text-center text-muted py-4">No hay registros que coincidan con la busqueda.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if rows is not empty %}
+        <p class="text-muted small mt-2 mb-0">Mostrando hasta 300 registros. Haga clic en el nombre de una columna para ordenar.</p>
+    {% endif %}
+{% endblock %}

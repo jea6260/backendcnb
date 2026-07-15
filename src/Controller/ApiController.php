@@ -44,15 +44,14 @@ final class ApiController extends AbstractController
         }
 
         try {
+            $now = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format(DATE_ATOM);
             $payload = [
+                'fecha' => !empty($data['fecha']) ? $data['fecha'] : $now,
                 'distancia_medida_cm' => (string) $data['distancia_medida_cm'],
                 'profundidad_cm' => (string) $data['profundidad_cm'],
                 'msnm' => (string) $data['msnm'],
+                'created_at' => $now,
             ];
-
-            if (!empty($data['fecha'])) {
-                $payload['fecha'] = $data['fecha'];
-            }
 
             $row = $this->insertReturning('cnb_app.mediciones_nivel', $payload);
 

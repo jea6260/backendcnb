@@ -33,4 +33,7 @@ psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/01_schema.sql
 echo "Aplicando portal de socios..."
 psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/02_socio_portal.sql
 
+echo "Aplicando mediciones de nivel..."
+psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/03_mediciones_nivel.sql
+
 echo "OK: base inicializada."

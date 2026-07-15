@@ -9,6 +9,7 @@ Backend Symfony para la gestion operativa del Club Nautico Bariloche.
 - SQL inicial en `sql/001_create_cnbdb.sql` para crear `CNBDB`, el esquema `cnb_app`, tablas, indices, triggers y reglas de varadero.
 - Reglas de varadero en PostgreSQL: maximo 15 dias por reserva, maximo anual de 15 dias por socio, control de solapamiento por espacio y control de eslora maxima.
 - Portal de socios (`sql/003_socio_portal.sql`).
+- Mediciones de nivel del dispositivo ESP8266 (`sql/004_mediciones_nivel.sql`): `POST /api/dispositivo/mediciones`.
 
 ## Render (hosting gratis)
 
@@ -83,6 +84,12 @@ Portal de socios:
 
 ```bash
 psql -h 127.0.0.1 -p 5432 -U postgres -d CNBDB -f sql/003_socio_portal.sql
+```
+
+Mediciones de nivel (ESP8266):
+
+```bash
+psql -h 127.0.0.1 -p 5432 -U postgres -d CNBDB -f sql/004_mediciones_nivel.sql
 ```
 
 Configurar credenciales en `.env.local` si no se usan los valores de desarrollo:

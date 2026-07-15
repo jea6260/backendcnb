@@ -26,6 +26,42 @@ final class ApiController extends AbstractController
         return $this->json(['status' => 'ok', 'service' => 'cnb-backend']);
     }
 
+    #[Route('/dispositivo/mediciones', name: 'api_dispositivo_mediciones', methods: ['POST'])]
+    public function deviceMeasurement(Request $request): JsonResponse
+    {
+        $data = $this->jsonBody($request);
+
+        foreach (['distancia_medida_cm', 'profundidad_cm', 'msnm'] as $field) {
+            if (!isset($data[$field]) || !is_numeric($data[$field])) {
+                return $this->json([
+                    'error' => sprintf('%s es obligatorio y debe ser numerico', $field),
+                ], Response::HTTP_BAD_REQUEST);
+            }
+        }
+
+        if (isset($data['fecha']) && !is_string($data['fecha'])) {
+            return $this->json(['error' => 'fecha debe ser un string ISO-8601'], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $payload = [
+                'distancia_medida_cm' => (string) $data['distancia_medida_cm'],
+                'profundidad_cm' => (string) $data['profundidad_cm'],
+                'msnm' => (string) $data['msnm'],
+            ];
+
+            if (!empty($data['fecha'])) {
+                $payload['fecha'] = $data['fecha'];
+            }
+
+            $row = $this->insertReturning('cnb_app.mediciones_nivel', $payload);
+
+            return $this->json(['data' => $this->registry->normalizeRow($row)], Response::HTTP_CREATED);
+        } catch (DbalException $exception) {
+            return $this->dbalError($exception);
+        }
+    }
+
     #[Route('/tareas/{id}/avance', name: 'api_tareas_avance', requirements: ['id' => '\d+'], methods: ['POST', 'PATCH'])]
     public function taskProgress(int $id, Request $request): JsonResponse
     {
@@ -116,7 +152,11 @@ final class ApiController extends AbstractController
             $query->andWhere('marinero_id = :marineroId')->setParameter('marineroId', $request->query->getInt('marineroId'));
         }
 
-        $dateColumn = isset($fields['fecha_planificada']) ? 'fecha_planificada' : (isset($fields['fecha_inicio']) ? 'fecha_inicio' : null);
+        $dateColumn = isset($fields['fecha_planificada'])
+            ? 'fecha_planificada'
+            : (isset($fields['fecha_inicio'])
+                ? 'fecha_inicio'
+                : (isset($fields['fecha']) ? 'fecha' : null));
         if ($dateColumn && $request->query->has('desde')) {
             $query->andWhere($dateColumn . ' >= :desde')->setParameter('desde', $request->query->get('desde'));
         }

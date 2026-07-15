@@ -33,7 +33,7 @@ services:
       APP_DEBUG: "1"
       APP_SECRET: change_me_cnb_docker_dev_secret_32b
       DEFAULT_URI: http://localhost:8000
-      DATABASE_URL: postgresql://cnb_user:cnb_password@database:5432/CNBDB?serverVersion=16&charset=utf8
+      DATABASE_URL: postgresql://cnb_user:cnb_password@database:5432/CNBDB?serverVersion=16&charset=utf8&sslmode=disable
     ports:
       - "8000:8000"
     volumes:

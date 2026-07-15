@@ -247,6 +247,18 @@ final class ResourceRegistry
                     'biometric_habilitado' => ['label' => 'Biometria', 'type' => 'boolean', 'default' => false, 'list' => true],
                 ],
             ],
+            'mediciones-nivel' => [
+                'table' => 'mediciones_nivel',
+                'label' => 'Mediciones de nivel',
+                'singular' => 'Medicion de nivel',
+                'description' => 'Lecturas del sensor ESP8266 (distancia, profundidad y msnm).',
+                'fields' => [
+                    'fecha' => ['label' => 'Fecha', 'type' => 'datetime', 'list' => true],
+                    'distancia_medida_cm' => ['label' => 'Distancia medida (cm)', 'type' => 'decimal', 'required' => true, 'list' => true],
+                    'profundidad_cm' => ['label' => 'Profundidad (cm)', 'type' => 'decimal', 'required' => true, 'list' => true],
+                    'msnm' => ['label' => 'msnm', 'type' => 'decimal', 'required' => true, 'list' => true],
+                ],
+            ],
         ]);
     }
 

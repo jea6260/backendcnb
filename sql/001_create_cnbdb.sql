@@ -10,8 +10,7 @@ CREATE SCHEMA IF NOT EXISTS cnb_app;
 SET search_path TO cnb_app, public;
 
 CREATE TABLE socios (
-    id BIGSERIAL PRIMARY KEY,
-    numero_socio VARCHAR(30) NOT NULL UNIQUE,
+    numero_socio INTEGER PRIMARY KEY CHECK (numero_socio >= 1 AND numero_socio <= 99999),
     nombre VARCHAR(120) NOT NULL,
     apellido VARCHAR(120) NOT NULL,
     email VARCHAR(180),
@@ -38,7 +37,7 @@ CREATE TABLE marineros (
 
 CREATE TABLE embarcaciones (
     id BIGSERIAL PRIMARY KEY,
-    socio_id BIGINT REFERENCES socios(id) ON DELETE SET NULL,
+    numero_socio INTEGER REFERENCES socios(numero_socio) ON DELETE SET NULL,
     nombre VARCHAR(160) NOT NULL,
     matricula VARCHAR(80) UNIQUE,
     tipo VARCHAR(80) NOT NULL DEFAULT 'velero',
@@ -81,7 +80,7 @@ CREATE TABLE espacios_varadero (
 
 CREATE TABLE reservas_varadero (
     id BIGSERIAL PRIMARY KEY,
-    socio_id BIGINT NOT NULL REFERENCES socios(id) ON DELETE RESTRICT,
+    numero_socio INTEGER NOT NULL REFERENCES socios(numero_socio) ON DELETE RESTRICT,
     embarcacion_id BIGINT NOT NULL REFERENCES embarcaciones(id) ON DELETE RESTRICT,
     espacio_id BIGINT NOT NULL REFERENCES espacios_varadero(id) ON DELETE RESTRICT,
     fecha_inicio DATE NOT NULL,
@@ -107,7 +106,7 @@ CREATE TABLE tareas (
     estado VARCHAR(20) NOT NULL DEFAULT 'pendiente'
         CHECK (estado IN ('pendiente', 'asignada', 'en_progreso', 'bloqueada', 'finalizada', 'cancelada')),
     progreso INTEGER NOT NULL DEFAULT 0 CHECK (progreso BETWEEN 0 AND 100),
-    socio_id BIGINT REFERENCES socios(id) ON DELETE SET NULL,
+    numero_socio INTEGER REFERENCES socios(numero_socio) ON DELETE SET NULL,
     embarcacion_id BIGINT REFERENCES embarcaciones(id) ON DELETE SET NULL,
     reserva_varadero_id BIGINT REFERENCES reservas_varadero(id) ON DELETE SET NULL,
     vehiculo_id BIGINT REFERENCES vehiculos(id) ON DELETE SET NULL,
@@ -140,9 +139,9 @@ CREATE TABLE avances_tarea (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_embarcaciones_socio ON embarcaciones(socio_id);
+CREATE INDEX idx_embarcaciones_numero_socio ON embarcaciones(numero_socio);
 CREATE INDEX idx_reservas_varadero_fechas ON reservas_varadero(fecha_inicio, fecha_fin);
-CREATE INDEX idx_reservas_varadero_socio ON reservas_varadero(socio_id);
+CREATE INDEX idx_reservas_varadero_numero_socio ON reservas_varadero(numero_socio);
 CREATE INDEX idx_reservas_varadero_espacio ON reservas_varadero(espacio_id);
 CREATE INDEX idx_tareas_estado ON tareas(estado);
 CREATE INDEX idx_tareas_fecha_planificada ON tareas(fecha_planificada);
@@ -182,7 +181,7 @@ RETURNS TRIGGER AS $$
 DECLARE
     dias_anuales INTEGER;
     reserva_activa BOOLEAN;
-    embarcacion_socio BIGINT;
+    embarcacion_socio INTEGER;
     embarcacion_eslora NUMERIC(5,2);
     espacio_eslora_max NUMERIC(5,2);
 BEGIN
@@ -194,11 +193,11 @@ BEGIN
         RAISE EXCEPTION 'Una reserva de varadero no puede superar 15 dias';
     END IF;
 
-    SELECT socio_id, eslora_m INTO embarcacion_socio, embarcacion_eslora
+    SELECT numero_socio, eslora_m INTO embarcacion_socio, embarcacion_eslora
     FROM embarcaciones
     WHERE id = NEW.embarcacion_id;
 
-    IF embarcacion_socio IS DISTINCT FROM NEW.socio_id THEN
+    IF embarcacion_socio IS DISTINCT FROM NEW.numero_socio THEN
         RAISE EXCEPTION 'La embarcacion debe pertenecer al socio que reserva';
     END IF;
 
@@ -232,7 +231,7 @@ BEGIN
         SELECT COALESCE(SUM(r.cantidad_dias), 0)
         INTO dias_anuales
         FROM reservas_varadero r
-        WHERE r.socio_id = NEW.socio_id
+        WHERE r.numero_socio = NEW.numero_socio
           AND r.id <> COALESCE(NEW.id, 0)
           AND r.estado IN ('pendiente', 'confirmada', 'en_curso', 'finalizada')
           AND EXTRACT(YEAR FROM r.fecha_inicio) = EXTRACT(YEAR FROM NEW.fecha_inicio);

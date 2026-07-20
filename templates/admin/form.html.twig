@@ -30,7 +30,7 @@
                             <label class="form-label" for="{{ name }}">{{ field.label }}</label>
 
                             {% if field.type == 'choice' %}
-                                <select class="form-select" id="{{ name }}" name="{{ name }}" {% if field.required|default(false) %}required{% endif %}>
+                                <select class="form-select" id="{{ name }}" name="{{ name }}" {% if field.required|default(false) %}required{% endif %} {% if id and field.primary|default(false) %}disabled{% endif %}>
                                     {% for optionValue, optionLabel in field.choices %}
                                         <option value="{{ optionValue }}" {% if value == optionValue %}selected{% endif %}>{{ optionLabel }}</option>
                                     {% endfor %}
@@ -45,9 +45,9 @@
                             {% elseif field.type == 'textarea' %}
                                 <textarea class="form-control" id="{{ name }}" name="{{ name }}" rows="4" {% if field.required|default(false) %}required{% endif %}>{{ value }}</textarea>
                             {% else %}
-                                {% set inputType = field.type == 'datetime' ? 'datetime-local' : (field.type == 'decimal' ? 'number' : field.type) %}
+                                {% set inputType = field.type == 'datetime' ? 'datetime-local' : (field.type in ['decimal', 'integer'] ? 'number' : field.type) %}
                                 {% set inputValue = field.type == 'datetime' and value ? value|slice(0, 16) : value %}
-                                <input class="form-control" id="{{ name }}" name="{{ name }}" type="{{ inputType }}" value="{{ inputValue }}" {% if field.type == 'decimal' %}step="0.01"{% endif %} {% if field.required|default(false) %}required{% endif %}>
+                                <input class="form-control" id="{{ name }}" name="{{ name }}" type="{{ inputType }}" value="{{ inputValue }}" {% if field.type == 'decimal' %}step="0.01"{% endif %} {% if field.type == 'integer' %}step="1"{% endif %} {% if field.required|default(false) %}required{% endif %} {% if id and field.primary|default(false) %}readonly{% endif %}>
                             {% endif %}
                         {% endif %}
                     </div>

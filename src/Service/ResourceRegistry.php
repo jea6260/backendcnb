@@ -20,9 +20,10 @@ final class ResourceRegistry
                 'label' => 'Socios',
                 'singular' => 'Socio',
                 'description' => 'Padron de socios y estado administrativo.',
+                'primary_key' => 'numero_socio',
                 'list_id' => false,
                 'fields' => [
-                    'numero_socio' => ['label' => 'Numero de socio', 'type' => 'text', 'required' => true, 'list' => true],
+                    'numero_socio' => ['label' => 'Numero de socio', 'type' => 'integer', 'required' => true, 'list' => true, 'primary' => true],
                     'nombre' => ['label' => 'Nombre', 'type' => 'text', 'required' => true, 'list' => true],
                     'apellido' => ['label' => 'Apellido', 'type' => 'text', 'required' => true, 'list' => true],
                     'email' => ['label' => 'Email', 'type' => 'email', 'list' => true],
@@ -59,7 +60,7 @@ final class ResourceRegistry
                 'singular' => 'Embarcacion',
                 'description' => 'Embarcaciones de socios y del club.',
                 'fields' => [
-                    'socio_id' => ['label' => 'Socio propietario', 'type' => 'relation', 'relation' => ['table' => 'socios', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'numero_socio' => ['label' => 'Socio propietario', 'type' => 'relation', 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
                     'nombre' => ['label' => 'Nombre', 'type' => 'text', 'required' => true, 'list' => true],
                     'matricula' => ['label' => 'Matricula', 'type' => 'text', 'list' => true],
                     'tipo' => ['label' => 'Tipo', 'type' => 'text', 'required' => true, 'default' => 'velero', 'list' => true],
@@ -119,7 +120,7 @@ final class ResourceRegistry
                 'singular' => 'Reserva de varadero',
                 'description' => 'Reservas de limpieza y mantenimiento con cupo anual por socio.',
                 'fields' => [
-                    'socio_id' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
                     'embarcacion_id' => ['label' => 'Embarcacion', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'embarcaciones', 'label' => "nombre || COALESCE(' - ' || matricula, '')"]],
                     'espacio_id' => ['label' => 'Espacio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'espacios_varadero', 'label' => "codigo || ' (' || eslora_max_m || 'm)'"]],
                     'fecha_inicio' => ['label' => 'Fecha inicio', 'type' => 'date', 'required' => true, 'list' => true],
@@ -168,7 +169,7 @@ final class ResourceRegistry
                         'cancelada' => 'Cancelada',
                     ]],
                     'progreso' => ['label' => 'Progreso %', 'type' => 'integer', 'default' => 0, 'list' => true],
-                    'socio_id' => ['label' => 'Socio', 'type' => 'relation', 'relation' => ['table' => 'socios', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
                     'embarcacion_id' => ['label' => 'Embarcacion', 'type' => 'relation', 'relation' => ['table' => 'embarcaciones', 'label' => "nombre || COALESCE(' - ' || matricula, '')"]],
                     'reserva_varadero_id' => ['label' => 'Reserva varadero', 'type' => 'relation', 'relation' => ['table' => 'reservas_varadero', 'label' => "'Reserva #' || id || ' ' || fecha_inicio || ' a ' || fecha_fin"]],
                     'vehiculo_id' => ['label' => 'Vehiculo', 'type' => 'relation', 'relation' => ['table' => 'vehiculos', 'label' => "nombre || ' - ' || tipo"]],
@@ -241,7 +242,7 @@ final class ResourceRegistry
                 'singular' => 'Acceso socio',
                 'description' => 'Credenciales de portal para socios.',
                 'fields' => [
-                    'socio_id' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
                     'email' => ['label' => 'Email login', 'type' => 'email', 'required' => true, 'list' => true],
                     'password_hash' => ['label' => 'Hash clave', 'type' => 'text', 'required' => true],
                     'biometric_habilitado' => ['label' => 'Biometria', 'type' => 'boolean', 'default' => false, 'list' => true],
@@ -306,11 +307,26 @@ final class ResourceRegistry
 
     /**
      * @param array<string, mixed> $definition
+     */
+    public function primaryKey(array $definition): string
+    {
+        return (string) ($definition['primary_key'] ?? 'id');
+    }
+
+    /**
+     * @param array<string, mixed> $definition
      * @return list<string>
      */
     public function listableColumns(array $definition): array
     {
-        return ['id', ...array_keys($this->listFields($definition))];
+        $pk = $this->primaryKey($definition);
+        $columns = array_keys($this->listFields($definition));
+
+        if ($pk === 'id' || ($definition['list_id'] ?? true)) {
+            return array_values(array_unique([$pk, ...$columns]));
+        }
+
+        return $columns;
     }
 
     /**
@@ -326,7 +342,8 @@ final class ResourceRegistry
         array $filters,
     ): array {
         $columns = $this->listableColumns($definition);
-        $sort = in_array($sort, $columns, true) ? $sort : 'id';
+        $pk = $this->primaryKey($definition);
+        $sort = in_array($sort, $columns, true) ? $sort : $pk;
         $direction = strtolower($direction) === 'asc' ? 'ASC' : 'DESC';
 
         $query = $connection->createQueryBuilder()
@@ -392,6 +409,10 @@ final class ResourceRegistry
         $payload = [];
 
         foreach ($this->formFields($definition) as $column => $field) {
+            if (($field['primary'] ?? false) && $patch) {
+                continue;
+            }
+
             if ($field['type'] === 'boolean' && $form && !$patch) {
                 $payload[$column] = array_key_exists($column, $source);
                 continue;
@@ -421,8 +442,10 @@ final class ResourceRegistry
         }
 
         $relation = $field['relation'];
+        $key = $relation['key'] ?? 'id';
         $sql = sprintf(
-            'SELECT id, %s AS label FROM %s ORDER BY label ASC LIMIT 500',
+            'SELECT %s AS id, %s AS label FROM %s ORDER BY label ASC LIMIT 500',
+            $key,
             $relation['label'],
             $relation['table']
         );
@@ -459,9 +482,27 @@ final class ResourceRegistry
 
         return match ($field['type']) {
             'boolean' => filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? false,
-            'integer', 'relation' => $value === null ? null : (int) $value,
+            'integer' => $value === null ? null : (int) $value,
+            'relation' => $this->coerceRelationValue($value, $field),
             'decimal' => $value === null ? null : (string) $value,
             default => $value,
         };
+    }
+
+    /**
+     * @param array<string, mixed> $field
+     */
+    private function coerceRelationValue(mixed $value, array $field): mixed
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $key = $field['relation']['key'] ?? 'id';
+        if ($key === 'id' || $key === 'numero_socio') {
+            return (int) $value;
+        }
+
+        return (string) $value;
     }
 }

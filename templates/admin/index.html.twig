@@ -100,8 +100,8 @@
                                 </td>
                             {% endfor %}
                             <td class="text-end">
-                                <a class="btn btn-sm btn-outline-primary" href="{{ path('admin_resource_edit', {resource: resource, id: row.id}) }}">Editar</a>
-                                <form method="post" action="{{ path('admin_resource_delete', {resource: resource, id: row.id}) }}" class="d-inline" onsubmit="return confirm('Eliminar registro?');">
+                                <a class="btn btn-sm btn-outline-primary" href="{{ path('admin_resource_edit', {resource: resource, id: attribute(row, primary_key)}) }}">Editar</a>
+                                <form method="post" action="{{ path('admin_resource_delete', {resource: resource, id: attribute(row, primary_key)}) }}" class="d-inline" onsubmit="return confirm('Eliminar registro?');">
                                     <button class="btn btn-sm btn-outline-danger" type="submit">Eliminar</button>
                                 </form>
                             </td>

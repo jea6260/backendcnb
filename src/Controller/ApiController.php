@@ -95,7 +95,7 @@ final class ApiController extends AbstractController
                 'comentario' => $data['comentario'] ?? null,
             ]);
 
-            return $this->rowResponse('cnb_app.tareas', $id);
+            return $this->rowResponse($this->registry->get('tareas'), $id);
         } catch (DbalException $exception) {
             return $this->dbalError($exception);
         }
@@ -131,10 +131,11 @@ final class ApiController extends AbstractController
     public function index(string $resource, Request $request): JsonResponse
     {
         $definition = $this->registry->get($resource);
+        $pk = $this->registry->primaryKey($definition);
         $query = $this->connection->createQueryBuilder()
             ->select('*')
             ->from($definition['table'])
-            ->orderBy('id', 'DESC')
+            ->orderBy($pk, 'DESC')
             ->setMaxResults(500);
 
         $fields = $definition['fields'];
@@ -143,8 +144,9 @@ final class ApiController extends AbstractController
             $query->andWhere('estado = :estado')->setParameter('estado', $request->query->get('estado'));
         }
 
-        if ($request->query->has('socioId') && isset($fields['socio_id'])) {
-            $query->andWhere('socio_id = :socioId')->setParameter('socioId', $request->query->getInt('socioId'));
+        $socioFilter = $request->query->get('numeroSocio') ?? $request->query->get('socioId');
+        if ($socioFilter !== null && $socioFilter !== '' && isset($fields['numero_socio'])) {
+            $query->andWhere('numero_socio = :numeroSocio')->setParameter('numeroSocio', (int) $socioFilter);
         }
 
         if ($request->query->has('marineroId') && isset($fields['marinero_id'])) {
@@ -183,39 +185,41 @@ final class ApiController extends AbstractController
         }
     }
 
-    #[Route('/{resource}/{id}', name: 'api_resource_show', requirements: ['resource' => '[a-z-]+', 'id' => '\d+'], methods: ['GET'])]
-    public function show(string $resource, int $id): JsonResponse
+    #[Route('/{resource}/{id}', name: 'api_resource_show', requirements: ['resource' => '[a-z-]+', 'id' => '[^/]+'], methods: ['GET'])]
+    public function show(string $resource, string $id): JsonResponse
     {
         $definition = $this->registry->get($resource);
 
-        return $this->rowResponse($definition['table'], $id);
+        return $this->rowResponse($definition, $id);
     }
 
-    #[Route('/{resource}/{id}', name: 'api_resource_update', requirements: ['resource' => '[a-z-]+', 'id' => '\d+'], methods: ['PATCH', 'PUT'])]
-    public function update(string $resource, int $id, Request $request): JsonResponse
+    #[Route('/{resource}/{id}', name: 'api_resource_update', requirements: ['resource' => '[a-z-]+', 'id' => '[^/]+'], methods: ['PATCH', 'PUT'])]
+    public function update(string $resource, string $id, Request $request): JsonResponse
     {
         $definition = $this->registry->get($resource);
+        $pk = $this->registry->primaryKey($definition);
 
         try {
             $payload = $this->registry->payloadFor($definition, $this->jsonBody($request), patch: true);
 
             if ($payload !== []) {
-                $this->connection->update($definition['table'], $payload, ['id' => $id]);
+                $this->connection->update($definition['table'], $payload, [$pk => $id]);
             }
 
-            return $this->rowResponse($definition['table'], $id);
+            return $this->rowResponse($definition, $id);
         } catch (DbalException $exception) {
             return $this->dbalError($exception);
         }
     }
 
-    #[Route('/{resource}/{id}', name: 'api_resource_delete', requirements: ['resource' => '[a-z-]+', 'id' => '\d+'], methods: ['DELETE'])]
-    public function delete(string $resource, int $id): JsonResponse
+    #[Route('/{resource}/{id}', name: 'api_resource_delete', requirements: ['resource' => '[a-z-]+', 'id' => '[^/]+'], methods: ['DELETE'])]
+    public function delete(string $resource, string $id): JsonResponse
     {
         $definition = $this->registry->get($resource);
+        $pk = $this->registry->primaryKey($definition);
 
         try {
-            $this->connection->delete($definition['table'], ['id' => $id]);
+            $this->connection->delete($definition['table'], [$pk => $id]);
 
             return $this->json(null, Response::HTTP_NO_CONTENT);
         } catch (DbalException $exception) {
@@ -257,9 +261,16 @@ final class ApiController extends AbstractController
         return $this->connection->fetchAssociative($sql, $payload) ?: [];
     }
 
-    private function rowResponse(string $table, int $id): JsonResponse
+    /**
+     * @param array<string, mixed> $definition
+     */
+    private function rowResponse(array $definition, string|int $id): JsonResponse
     {
-        $row = $this->connection->fetchAssociative(sprintf('SELECT * FROM %s WHERE id = ?', $table), [$id]);
+        $pk = $this->registry->primaryKey($definition);
+        $row = $this->connection->fetchAssociative(
+            sprintf('SELECT * FROM %s WHERE %s = ?', $definition['table'], $pk),
+            [$id]
+        );
 
         if (!$row) {
             return $this->json(['error' => 'Registro no encontrado'], Response::HTTP_NOT_FOUND);

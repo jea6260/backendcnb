@@ -24,12 +24,27 @@ final class SocioPortalController extends AbstractController
     public function register(Request $request): JsonResponse
     {
         $data = $this->jsonBody($request);
-        $numeroSocio = trim((string) ($data['numero_socio'] ?? ''));
+        $numeroSocioRaw = trim((string) ($data['numero_socio'] ?? ''));
         $email = trim((string) ($data['email'] ?? ''));
         $password = (string) ($data['password'] ?? '');
 
-        if ($numeroSocio === '' || $email === '' || $password === '') {
+        if ($numeroSocioRaw === '' || $email === '' || $password === '') {
             return $this->json(['error' => 'numero_socio, email y password son obligatorios'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if (!ctype_digit($numeroSocioRaw) || strlen($numeroSocioRaw) > 5) {
+            return $this->json(
+                ['error' => 'numero_socio debe ser numerico de hasta 5 digitos'],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        $numeroSocio = (int) $numeroSocioRaw;
+        if ($numeroSocio < 1 || $numeroSocio > 99999) {
+            return $this->json(
+                ['error' => 'numero_socio debe estar entre 1 y 99999'],
+                Response::HTTP_BAD_REQUEST
+            );
         }
 
         if (strlen($password) < 8) {
@@ -42,7 +57,7 @@ final class SocioPortalController extends AbstractController
 
         try {
             $socio = $this->connection->fetchAssociative(
-                'SELECT id, numero_socio, nombre, apellido, email, telefono, documento, estado
+                'SELECT numero_socio, nombre, apellido, email, telefono, documento, estado
                  FROM cnb_app.socios
                  WHERE numero_socio = ?',
                 [$numeroSocio]
@@ -72,8 +87,8 @@ final class SocioPortalController extends AbstractController
             }
 
             $existingAccess = $this->connection->fetchOne(
-                'SELECT id FROM cnb_app.socio_acceso WHERE socio_id = ? OR LOWER(email) = LOWER(?)',
-                [(int) $socio['id'], $email]
+                'SELECT id FROM cnb_app.socio_acceso WHERE numero_socio = ? OR LOWER(email) = LOWER(?)',
+                [$socio['numero_socio'], $email]
             );
 
             if ($existingAccess) {
@@ -81,10 +96,10 @@ final class SocioPortalController extends AbstractController
             }
 
             $this->connection->executeStatement(
-                'INSERT INTO cnb_app.socio_acceso (socio_id, email, password_hash)
+                'INSERT INTO cnb_app.socio_acceso (numero_socio, email, password_hash)
                  VALUES (?, ?, ?)',
                 [
-                    (int) $socio['id'],
+                    $socio['numero_socio'],
                     strtolower($email),
                     password_hash($password, PASSWORD_DEFAULT),
                 ]
@@ -94,7 +109,7 @@ final class SocioPortalController extends AbstractController
             $expiresAt = (new \DateTimeImmutable('+30 days'))->format('c');
 
             $this->connection->insert('cnb_app.socio_sesiones', [
-                'socio_id' => (int) $socio['id'],
+                'numero_socio' => $socio['numero_socio'],
                 'token' => $token,
                 'expires_at' => $expiresAt,
             ]);
@@ -102,9 +117,9 @@ final class SocioPortalController extends AbstractController
             $row = $this->connection->fetchAssociative(
                 'SELECT sa.*, s.numero_socio, s.nombre, s.apellido, s.telefono, s.documento, s.estado AS socio_estado
                  FROM cnb_app.socio_acceso sa
-                 INNER JOIN cnb_app.socios s ON s.id = sa.socio_id
-                 WHERE sa.socio_id = ?',
-                [(int) $socio['id']]
+                 INNER JOIN cnb_app.socios s ON s.numero_socio = sa.numero_socio
+                 WHERE sa.numero_socio = ?',
+                [$socio['numero_socio']]
             );
 
             return $this->json([
@@ -134,7 +149,7 @@ final class SocioPortalController extends AbstractController
             $row = $this->connection->fetchAssociative(
                 'SELECT sa.*, s.numero_socio, s.nombre, s.apellido, s.telefono, s.documento, s.estado AS socio_estado
                  FROM cnb_app.socio_acceso sa
-                 INNER JOIN cnb_app.socios s ON s.id = sa.socio_id
+                 INNER JOIN cnb_app.socios s ON s.numero_socio = sa.numero_socio
                  WHERE LOWER(sa.email) = LOWER(?)',
                 [$email]
             );
@@ -151,7 +166,7 @@ final class SocioPortalController extends AbstractController
             $expiresAt = (new \DateTimeImmutable('+30 days'))->format('c');
 
             $this->connection->insert('cnb_app.socio_sesiones', [
-                'socio_id' => (int) $row['socio_id'],
+                'numero_socio' => $row['numero_socio'],
                 'token' => $token,
                 'expires_at' => $expiresAt,
             ]);
@@ -197,8 +212,8 @@ final class SocioPortalController extends AbstractController
 
         try {
             $hash = $this->connection->fetchOne(
-                'SELECT password_hash FROM cnb_app.socio_acceso WHERE socio_id = ?',
-                [$socio['id']]
+                'SELECT password_hash FROM cnb_app.socio_acceso WHERE numero_socio = ?',
+                [$socio['numero_socio']]
             );
 
             if (!$hash || !password_verify($current, (string) $hash)) {
@@ -208,7 +223,7 @@ final class SocioPortalController extends AbstractController
             $this->connection->update('cnb_app.socio_acceso', [
                 'password_hash' => password_hash($next, PASSWORD_DEFAULT),
                 'updated_at' => date('c'),
-            ], ['socio_id' => $socio['id']]);
+            ], ['numero_socio' => $socio['numero_socio']]);
 
             return $this->json(['data' => ['ok' => true]]);
         } catch (DbalException $exception) {
@@ -230,7 +245,7 @@ final class SocioPortalController extends AbstractController
             $this->connection->update('cnb_app.socio_acceso', [
                 'biometric_habilitado' => $enabled,
                 'updated_at' => date('c'),
-            ], ['socio_id' => $socio['id']]);
+            ], ['numero_socio' => $socio['numero_socio']]);
 
             return $this->json(['data' => ['biometric_habilitado' => $enabled]]);
         } catch (DbalException $exception) {
@@ -268,6 +283,54 @@ final class SocioPortalController extends AbstractController
         return $this->json(['data' => array_map($this->registry->normalizeRow(...), $rows)]);
     }
 
+    #[Route('/mediciones-nivel', name: 'api_socio_mediciones_nivel', methods: ['GET'])]
+    public function medicionesNivel(Request $request): JsonResponse
+    {
+        $auth = $this->authenticate($request);
+        if ($auth instanceof JsonResponse) {
+            return $auth;
+        }
+
+        $limit = $request->query->getInt('limit', 200);
+        if ($limit < 1) {
+            $limit = 1;
+        }
+        if ($limit > 500) {
+            $limit = 500;
+        }
+
+        $desde = trim((string) $request->query->get('desde', ''));
+        $hasta = trim((string) $request->query->get('hasta', ''));
+
+        $sql = 'SELECT * FROM cnb_app.mediciones_nivel WHERE 1=1';
+        $params = [];
+
+        if ($desde !== '') {
+            $sql .= ' AND fecha >= ?';
+            $params[] = $desde;
+        }
+        if ($hasta !== '') {
+            $sql .= ' AND fecha <= ?';
+            $params[] = $hasta;
+        }
+
+        $sql .= ' ORDER BY fecha DESC LIMIT ?';
+        $params[] = $limit;
+
+        $rows = $this->connection->fetchAllAssociative($sql, $params);
+        // Ascendente para graficar evolucion temporal
+        $rows = array_reverse($rows);
+
+        $ultima = $rows === [] ? null : $this->registry->normalizeRow($rows[array_key_last($rows)]);
+
+        return $this->json([
+            'data' => [
+                'ultima' => $ultima,
+                'lecturas' => array_map($this->registry->normalizeRow(...), $rows),
+            ],
+        ]);
+    }
+
     #[Route('/embarcaciones', name: 'api_socio_embarcaciones', methods: ['GET'])]
     public function embarcaciones(Request $request): JsonResponse
     {
@@ -277,8 +340,8 @@ final class SocioPortalController extends AbstractController
         }
 
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT * FROM cnb_app.embarcaciones WHERE socio_id = ? ORDER BY nombre ASC',
-            [$socio['id']]
+            'SELECT * FROM cnb_app.embarcaciones WHERE numero_socio = ? ORDER BY nombre ASC',
+            [$socio['numero_socio']]
         );
 
         return $this->json(['data' => array_map($this->registry->normalizeRow(...), $rows)]);
@@ -308,8 +371,8 @@ final class SocioPortalController extends AbstractController
         }
 
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT * FROM cnb_app.reservas_varadero WHERE socio_id = ? ORDER BY fecha_inicio DESC',
-            [$socio['id']]
+            'SELECT * FROM cnb_app.reservas_varadero WHERE numero_socio = ? ORDER BY fecha_inicio DESC',
+            [$socio['numero_socio']]
         );
 
         return $this->json(['data' => array_map($this->registry->normalizeRow(...), $rows)]);
@@ -333,7 +396,7 @@ final class SocioPortalController extends AbstractController
 
         try {
             $payload = [
-                'socio_id' => $socio['id'],
+                'numero_socio' => $socio['numero_socio'],
                 'embarcacion_id' => (int) $data['embarcacion_id'],
                 'espacio_id' => (int) $data['espacio_id'],
                 'fecha_inicio' => $data['fecha_inicio'],
@@ -343,8 +406,8 @@ final class SocioPortalController extends AbstractController
                 'estado' => 'pendiente',
             ];
 
-            $sql = 'INSERT INTO cnb_app.reservas_varadero (socio_id, embarcacion_id, espacio_id, fecha_inicio, fecha_fin, motivo, observaciones, estado)
-                    VALUES (:socio_id, :embarcacion_id, :espacio_id, :fecha_inicio, :fecha_fin, :motivo, :observaciones, :estado) RETURNING *';
+            $sql = 'INSERT INTO cnb_app.reservas_varadero (numero_socio, embarcacion_id, espacio_id, fecha_inicio, fecha_fin, motivo, observaciones, estado)
+                    VALUES (:numero_socio, :embarcacion_id, :espacio_id, :fecha_inicio, :fecha_fin, :motivo, :observaciones, :estado) RETURNING *';
             $row = $this->connection->fetchAssociative($sql, $payload) ?: [];
 
             return $this->json(['data' => $this->registry->normalizeRow($row)], Response::HTTP_CREATED);
@@ -368,15 +431,15 @@ final class SocioPortalController extends AbstractController
 
         try {
             $payload = [
-                'socio_id' => $socio['id'],
+                'numero_socio' => $socio['numero_socio'],
                 'asunto' => $data['asunto'],
                 'mensaje' => $data['mensaje'],
                 'fecha_preferida' => $data['fecha_preferida'] ?? null,
                 'estado' => 'pendiente',
             ];
             $row = $this->connection->fetchAssociative(
-                'INSERT INTO cnb_app.solicitudes_reunion_cd (socio_id, asunto, mensaje, fecha_preferida, estado)
-                 VALUES (:socio_id, :asunto, :mensaje, :fecha_preferida, :estado) RETURNING *',
+                'INSERT INTO cnb_app.solicitudes_reunion_cd (numero_socio, asunto, mensaje, fecha_preferida, estado)
+                 VALUES (:numero_socio, :asunto, :mensaje, :fecha_preferida, :estado) RETURNING *',
                 $payload
             ) ?: [];
 
@@ -401,14 +464,14 @@ final class SocioPortalController extends AbstractController
 
         try {
             $payload = [
-                'socio_id' => $socio['id'],
+                'numero_socio' => $socio['numero_socio'],
                 'asunto' => $data['asunto'],
                 'mensaje' => $data['mensaje'],
                 'estado' => 'recibida',
             ];
             $row = $this->connection->fetchAssociative(
-                'INSERT INTO cnb_app.notas_cd (socio_id, asunto, mensaje, estado)
-                 VALUES (:socio_id, :asunto, :mensaje, :estado) RETURNING *',
+                'INSERT INTO cnb_app.notas_cd (numero_socio, asunto, mensaje, estado)
+                 VALUES (:numero_socio, :asunto, :mensaje, :estado) RETURNING *',
                 $payload
             ) ?: [];
 
@@ -427,8 +490,8 @@ final class SocioPortalController extends AbstractController
         }
 
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT * FROM cnb_app.notas_cd WHERE socio_id = ? ORDER BY created_at DESC',
-            [$socio['id']]
+            'SELECT * FROM cnb_app.notas_cd WHERE numero_socio = ? ORDER BY created_at DESC',
+            [$socio['numero_socio']]
         );
 
         return $this->json(['data' => array_map($this->registry->normalizeRow(...), $rows)]);
@@ -451,7 +514,7 @@ final class SocioPortalController extends AbstractController
             $this->connection->update('cnb_app.socio_acceso', [
                 'facial_reference' => $image,
                 'updated_at' => date('c'),
-            ], ['socio_id' => $socio['id']]);
+            ], ['numero_socio' => $socio['numero_socio']]);
 
             return $this->json(['data' => ['enrolled' => true]]);
         } catch (DbalException $exception) {
@@ -477,8 +540,8 @@ final class SocioPortalController extends AbstractController
 
         try {
             $reference = $this->connection->fetchOne(
-                'SELECT facial_reference FROM cnb_app.socio_acceso WHERE socio_id = ?',
-                [$socio['id']]
+                'SELECT facial_reference FROM cnb_app.socio_acceso WHERE numero_socio = ?',
+                [$socio['numero_socio']]
             );
 
             $score = $this->compareFaces((string) $reference, $image);
@@ -489,7 +552,7 @@ final class SocioPortalController extends AbstractController
                 : 'Debe registrar su rostro antes de usar portones.';
 
             $this->connection->insert('cnb_app.accesos_porton', [
-                'socio_id' => $socio['id'],
+                'numero_socio' => $socio['numero_socio'],
                 'porton' => $porton,
                 'resultado' => $resultado,
                 'puntaje_facial' => $score,
@@ -527,8 +590,8 @@ final class SocioPortalController extends AbstractController
     private function socioPayload(array $row): array
     {
         return [
-            'id' => (int) $row['socio_id'],
-            'numero_socio' => $row['numero_socio'] ?? null,
+            'id' => (int) ($row['numero_socio'] ?? 0),
+            'numero_socio' => isset($row['numero_socio']) ? (int) $row['numero_socio'] : null,
             'nombre' => $row['nombre'] ?? null,
             'apellido' => $row['apellido'] ?? null,
             'email' => $row['email'] ?? null,
@@ -559,8 +622,8 @@ final class SocioPortalController extends AbstractController
             $row = $this->connection->fetchAssociative(
                 'SELECT sa.*, s.numero_socio, s.nombre, s.apellido, s.telefono, s.documento, s.estado AS socio_estado
                  FROM cnb_app.socio_sesiones ss
-                 INNER JOIN cnb_app.socio_acceso sa ON sa.socio_id = ss.socio_id
-                 INNER JOIN cnb_app.socios s ON s.id = ss.socio_id
+                 INNER JOIN cnb_app.socio_acceso sa ON sa.numero_socio = ss.numero_socio
+                 INNER JOIN cnb_app.socios s ON s.numero_socio = ss.numero_socio
                  WHERE ss.token = ? AND ss.expires_at > NOW()',
                 [$token]
             );

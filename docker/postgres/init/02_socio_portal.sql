@@ -6,7 +6,7 @@ SET search_path TO cnb_app, public;
 
 CREATE TABLE IF NOT EXISTS socio_acceso (
     id BIGSERIAL PRIMARY KEY,
-    socio_id BIGINT NOT NULL UNIQUE REFERENCES socios(id) ON DELETE CASCADE,
+    numero_socio INTEGER NOT NULL UNIQUE REFERENCES socios(numero_socio) ON DELETE CASCADE,
     email VARCHAR(180) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     biometric_habilitado BOOLEAN NOT NULL DEFAULT FALSE,
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS socio_acceso (
 
 CREATE TABLE IF NOT EXISTS socio_sesiones (
     id BIGSERIAL PRIMARY KEY,
-    socio_id BIGINT NOT NULL REFERENCES socios(id) ON DELETE CASCADE,
+    numero_socio INTEGER NOT NULL REFERENCES socios(numero_socio) ON DELETE CASCADE,
     token VARCHAR(64) NOT NULL UNIQUE,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS camaras (
 
 CREATE TABLE IF NOT EXISTS solicitudes_reunion_cd (
     id BIGSERIAL PRIMARY KEY,
-    socio_id BIGINT NOT NULL REFERENCES socios(id) ON DELETE CASCADE,
+    numero_socio INTEGER NOT NULL REFERENCES socios(numero_socio) ON DELETE CASCADE,
     asunto VARCHAR(200) NOT NULL,
     mensaje TEXT NOT NULL,
     fecha_preferida DATE,
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS solicitudes_reunion_cd (
 
 CREATE TABLE IF NOT EXISTS notas_cd (
     id BIGSERIAL PRIMARY KEY,
-    socio_id BIGINT NOT NULL REFERENCES socios(id) ON DELETE CASCADE,
+    numero_socio INTEGER NOT NULL REFERENCES socios(numero_socio) ON DELETE CASCADE,
     asunto VARCHAR(200) NOT NULL,
     mensaje TEXT NOT NULL,
     estado VARCHAR(30) NOT NULL DEFAULT 'recibida'
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS notas_cd (
 
 CREATE TABLE IF NOT EXISTS accesos_porton (
     id BIGSERIAL PRIMARY KEY,
-    socio_id BIGINT NOT NULL REFERENCES socios(id) ON DELETE CASCADE,
+    numero_socio INTEGER NOT NULL REFERENCES socios(numero_socio) ON DELETE CASCADE,
     porton VARCHAR(60) NOT NULL,
     resultado VARCHAR(30) NOT NULL DEFAULT 'pendiente'
         CHECK (resultado IN ('aprobado', 'rechazado', 'pendiente', 'error')),
@@ -101,22 +101,22 @@ WHERE NOT EXISTS (SELECT 1 FROM camaras LIMIT 1);
 -- Usuario demo: socio #1 con clave "Socio123!" (cambiar en produccion)
 DO $$
 DECLARE
-    demo_socio_id BIGINT;
+    demo_numero INTEGER;
 BEGIN
-    SELECT id INTO demo_socio_id FROM socios ORDER BY id LIMIT 1;
+    SELECT numero_socio INTO demo_numero FROM socios ORDER BY numero_socio LIMIT 1;
 
-    IF demo_socio_id IS NULL THEN
+    IF demo_numero IS NULL THEN
         INSERT INTO socios (numero_socio, nombre, apellido, email, telefono, documento, estado)
         VALUES ('1001', 'Juan', 'Perez', 'socio.demo@cnb.org.ar', '2944000000', '20123456', 'activo')
-        RETURNING id INTO demo_socio_id;
+        RETURNING numero_socio INTO demo_numero;
     END IF;
 
-    INSERT INTO socio_acceso (socio_id, email, password_hash, biometric_habilitado)
+    INSERT INTO socio_acceso (numero_socio, email, password_hash, biometric_habilitado)
     VALUES (
-        demo_socio_id,
-        COALESCE((SELECT email FROM socios WHERE id = demo_socio_id), 'socio.demo@cnb.org.ar'),
+        demo_numero,
+        COALESCE((SELECT email FROM socios WHERE numero_socio = demo_numero), 'socio.demo@cnb.org.ar'),
         '$2y$10$x7WJwH55cpEqOEK8mCQx/Ofp9iVOBRliVTEy8N3tsaQS9fiH/W1vK',
         FALSE
     )
-    ON CONFLICT (socio_id) DO NOTHING;
+    ON CONFLICT (numero_socio) DO NOTHING;
 END $$;

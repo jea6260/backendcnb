@@ -11,7 +11,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
-#[Route('/api/socio')]
+#[Route('/api/socio', priority: 10)]
 final class SocioPortalController extends AbstractController
 {
     public function __construct(

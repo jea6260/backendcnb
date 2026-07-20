@@ -127,7 +127,8 @@ final class ApiController extends AbstractController
         }
     }
 
-    #[Route('/{resource}', name: 'api_resource_index', requirements: ['resource' => '[a-z-]+'], methods: ['GET'])]
+    // Excluye "socio": esas rutas las atiende SocioPortalController (/api/socio/*).
+    #[Route('/{resource}', name: 'api_resource_index', requirements: ['resource' => '(?!socio$)[a-z-]+'], methods: ['GET'])]
     public function index(string $resource, Request $request): JsonResponse
     {
         $definition = $this->registry->get($resource);
@@ -170,7 +171,7 @@ final class ApiController extends AbstractController
         return $this->json(['data' => array_map($this->registry->normalizeRow(...), $rows)]);
     }
 
-    #[Route('/{resource}', name: 'api_resource_create', requirements: ['resource' => '[a-z-]+'], methods: ['POST'])]
+    #[Route('/{resource}', name: 'api_resource_create', requirements: ['resource' => '(?!socio$)[a-z-]+'], methods: ['POST'])]
     public function create(string $resource, Request $request): JsonResponse
     {
         $definition = $this->registry->get($resource);
@@ -185,7 +186,7 @@ final class ApiController extends AbstractController
         }
     }
 
-    #[Route('/{resource}/{id}', name: 'api_resource_show', requirements: ['resource' => '[a-z-]+', 'id' => '[^/]+'], methods: ['GET'])]
+    #[Route('/{resource}/{id}', name: 'api_resource_show', requirements: ['resource' => '(?!socio$)[a-z-]+', 'id' => '[^/]+'], methods: ['GET'])]
     public function show(string $resource, string $id): JsonResponse
     {
         $definition = $this->registry->get($resource);
@@ -193,7 +194,7 @@ final class ApiController extends AbstractController
         return $this->rowResponse($definition, $id);
     }
 
-    #[Route('/{resource}/{id}', name: 'api_resource_update', requirements: ['resource' => '[a-z-]+', 'id' => '[^/]+'], methods: ['PATCH', 'PUT'])]
+    #[Route('/{resource}/{id}', name: 'api_resource_update', requirements: ['resource' => '(?!socio$)[a-z-]+', 'id' => '[^/]+'], methods: ['PATCH', 'PUT'])]
     public function update(string $resource, string $id, Request $request): JsonResponse
     {
         $definition = $this->registry->get($resource);
@@ -212,7 +213,7 @@ final class ApiController extends AbstractController
         }
     }
 
-    #[Route('/{resource}/{id}', name: 'api_resource_delete', requirements: ['resource' => '[a-z-]+', 'id' => '[^/]+'], methods: ['DELETE'])]
+    #[Route('/{resource}/{id}', name: 'api_resource_delete', requirements: ['resource' => '(?!socio$)[a-z-]+', 'id' => '[^/]+'], methods: ['DELETE'])]
     public function delete(string $resource, string $id): JsonResponse
     {
         $definition = $this->registry->get($resource);

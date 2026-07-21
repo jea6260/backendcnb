@@ -12,3 +12,5 @@ if (PHP_SAPI === 'cli-server') {
 }
 
 require __DIR__.'/index.php';
+
+return true;

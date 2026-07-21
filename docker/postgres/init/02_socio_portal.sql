@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS socio_sesiones (
     numero_socio INTEGER NOT NULL REFERENCES socios(numero_socio) ON DELETE CASCADE,
     token VARCHAR(64) NOT NULL UNIQUE,
     expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_socio_sesiones_token ON socio_sesiones(token);
@@ -78,7 +79,8 @@ CREATE TABLE IF NOT EXISTS accesos_porton (
         CHECK (resultado IN ('aprobado', 'rechazado', 'pendiente', 'error')),
     puntaje_facial NUMERIC(5,2),
     observaciones TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 INSERT INTO novedades (titulo, contenido, publicado_at)

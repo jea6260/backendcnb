@@ -120,6 +120,8 @@ CREATE TABLE tarea_asignaciones (
     rol VARCHAR(80),
     asignado_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     finalizado_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (tarea_id, marinero_id)
 );
 
@@ -131,7 +133,8 @@ CREATE TABLE avances_tarea (
     estado VARCHAR(20) NOT NULL
         CHECK (estado IN ('pendiente', 'asignada', 'en_progreso', 'bloqueada', 'finalizada', 'cancelada')),
     comentario TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_embarcaciones_numero_socio ON embarcaciones(numero_socio);

@@ -3,9 +3,11 @@
 namespace App\Controller;
 
 use App\Service\ResourceRegistry;
+use App\Service\VaraderoService;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception as DbalException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,6 +18,7 @@ final class AdminController extends AbstractController
     public function __construct(
         private readonly Connection $connection,
         private readonly ResourceRegistry $registry,
+        private readonly VaraderoService $varadero,
     ) {
     }
 
@@ -39,6 +42,140 @@ final class AdminController extends AbstractController
             'resources' => $resources,
             'stats' => $stats,
         ]);
+    }
+
+    #[Route('/admin/varadero', name: 'admin_varadero', priority: 20, methods: ['GET', 'POST'])]
+    public function varadero(Request $request): Response
+    {
+        $hoy = new \DateTimeImmutable('today');
+        $error = null;
+        $data = [
+            'numero_socio' => '',
+            'embarcacion_id' => '',
+            'espacio_id' => '',
+            'fecha_inicio' => $hoy->format('Y-m-d'),
+            'fecha_fin' => $hoy->format('Y-m-d'),
+            'estado' => 'pendiente',
+            'motivo' => 'limpieza_mantenimiento',
+            'observaciones' => '',
+        ];
+
+        if ($request->isMethod('POST')) {
+            $data = array_merge($data, $request->request->all());
+            $resultado = $this->varadero->validarYPrepararReserva($data);
+
+            if (!$resultado['ok']) {
+                $error = $resultado['error'];
+            } else {
+                try {
+                    $this->connection->insert('cnb_app.reservas_varadero', $resultado['payload']);
+                    $this->addFlash('success', 'Reserva de varadero creada correctamente.');
+
+                    return $this->redirectToRoute('admin_varadero', [
+                        'desde' => $resultado['payload']['fecha_inicio'],
+                    ]);
+                } catch (DbalException $exception) {
+                    $error = $exception->getPrevious()?->getMessage() ?? $exception->getMessage();
+                }
+            }
+        }
+
+        $desde = (string) $request->query->get('desde', $hoy->format('Y-m-d'));
+        try {
+            $desdeDate = new \DateTimeImmutable($desde);
+        } catch (\Exception) {
+            $desdeDate = $hoy;
+            $desde = $hoy->format('Y-m-d');
+        }
+        $hasta = $desdeDate->modify('+41 days')->format('Y-m-d');
+
+        $socios = $this->connection->fetchAllAssociative(
+            "SELECT numero_socio AS id,
+                    apellido || ', ' || nombre || ' #' || numero_socio AS label
+             FROM cnb_app.socios
+             WHERE estado = 'activo'
+             ORDER BY apellido ASC, nombre ASC"
+        );
+
+        $espacios = $this->connection->fetchAllAssociative(
+            "SELECT id, codigo || ' (' || eslora_max_m || 'm)' AS label, eslora_max_m, activo
+             FROM cnb_app.espacios_varadero
+             WHERE activo = TRUE
+             ORDER BY codigo ASC"
+        );
+
+        $embarcaciones = [];
+        $numeroSocio = (int) ($data['numero_socio'] ?? 0);
+        if ($numeroSocio > 0) {
+            $embarcaciones = $this->varadero->embarcacionesDeSocio($numeroSocio);
+        }
+
+        return $this->render('admin/varadero.html.twig', [
+            'data' => $data,
+            'error' => $error,
+            'socios' => $socios,
+            'espacios' => $espacios,
+            'embarcaciones' => $embarcaciones,
+            'timeline_desde' => $desde,
+            'timeline_hasta' => $hasta,
+            'timeline' => $this->varadero->timeline($desde, $hasta),
+            'dias_max_reserva' => VaraderoService::DIAS_MAX_RESERVA,
+            'dias_max_anio' => VaraderoService::DIAS_MAX_ANIO,
+        ]);
+    }
+
+    #[Route('/admin/varadero/timeline', name: 'admin_varadero_timeline', priority: 20, methods: ['GET'])]
+    public function varaderoTimeline(Request $request): JsonResponse
+    {
+        $hoy = new \DateTimeImmutable('today');
+        $desde = trim((string) $request->query->get('desde', $hoy->format('Y-m-d')));
+        $hasta = trim((string) $request->query->get('hasta', $hoy->modify('+41 days')->format('Y-m-d')));
+
+        try {
+            new \DateTimeImmutable($desde);
+            new \DateTimeImmutable($hasta);
+        } catch (\Exception) {
+            return $this->json(['error' => 'Fechas invalidas'], Response::HTTP_BAD_REQUEST);
+        }
+
+        return $this->json(['data' => $this->varadero->timeline($desde, $hasta)]);
+    }
+
+    #[Route('/admin/varadero/disponibilidad', name: 'admin_varadero_disponibilidad', priority: 20, methods: ['GET'])]
+    public function varaderoDisponibilidad(Request $request): JsonResponse
+    {
+        $espacioId = (int) $request->query->get('espacio_id', 0);
+        $numeroSocio = (int) $request->query->get('numero_socio', 0);
+        $hoy = new \DateTimeImmutable('today');
+        $desde = trim((string) $request->query->get('desde', $hoy->format('Y-m-d')));
+        $hasta = trim((string) $request->query->get('hasta', $hoy->modify('+6 months')->format('Y-m-d')));
+
+        try {
+            new \DateTimeImmutable($desde);
+            new \DateTimeImmutable($hasta);
+        } catch (\Exception) {
+            return $this->json(['error' => 'Fechas invalidas'], Response::HTTP_BAD_REQUEST);
+        }
+
+        return $this->json([
+            'data' => $this->varadero->disponibilidad(
+                $espacioId > 0 ? $espacioId : null,
+                $desde,
+                $hasta,
+                $numeroSocio > 0 ? $numeroSocio : null
+            ),
+        ]);
+    }
+
+    #[Route('/admin/varadero/embarcaciones', name: 'admin_varadero_embarcaciones', priority: 20, methods: ['GET'])]
+    public function varaderoEmbarcaciones(Request $request): JsonResponse
+    {
+        $numeroSocio = (int) $request->query->get('numero_socio', 0);
+        if ($numeroSocio < 1) {
+            return $this->json(['error' => 'numero_socio es obligatorio'], Response::HTTP_BAD_REQUEST);
+        }
+
+        return $this->json(['data' => $this->varadero->embarcacionesDeSocio($numeroSocio)]);
     }
 
     #[Route('/admin/{resource}', name: 'admin_resource_index', methods: ['GET'])]
@@ -73,6 +210,10 @@ final class AdminController extends AbstractController
     #[Route('/admin/{resource}/nuevo', name: 'admin_resource_new', methods: ['GET', 'POST'])]
     public function new(string $resource, Request $request): Response
     {
+        if ($resource === 'reservas-varadero') {
+            return $this->redirectToRoute('admin_varadero');
+        }
+
         $definition = $this->registry->get($resource);
         $data = [];
         $error = null;
@@ -81,11 +222,23 @@ final class AdminController extends AbstractController
             $data = $request->request->all();
 
             try {
-                $payload = $this->registry->payloadFor($definition, $data, form: true);
-                $this->connection->insert($definition['table'], $payload);
-                $this->addFlash('success', sprintf('%s creado correctamente.', $definition['singular']));
+                if ($resource === 'reservas-varadero') {
+                    $resultado = $this->varadero->validarYPrepararReserva($data);
+                    if (!$resultado['ok']) {
+                        $error = $resultado['error'];
+                    } else {
+                        $this->connection->insert($definition['table'], $resultado['payload']);
+                        $this->addFlash('success', sprintf('%s creado correctamente.', $definition['singular']));
 
-                return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                        return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                    }
+                } else {
+                    $payload = $this->registry->payloadFor($definition, $data, form: true);
+                    $this->connection->insert($definition['table'], $payload);
+                    $this->addFlash('success', sprintf('%s creado correctamente.', $definition['singular']));
+
+                    return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                }
             } catch (DbalException $exception) {
                 $error = $exception->getPrevious()?->getMessage() ?? $exception->getMessage();
             }
@@ -115,11 +268,23 @@ final class AdminController extends AbstractController
             $data = $request->request->all();
 
             try {
-                $payload = $this->registry->payloadFor($definition, $data, patch: true, form: true);
-                $this->connection->update($definition['table'], $payload, [$pk => $id]);
-                $this->addFlash('success', sprintf('%s actualizado correctamente.', $definition['singular']));
+                if ($resource === 'reservas-varadero') {
+                    $resultado = $this->varadero->validarYPrepararReserva($data, (int) $id);
+                    if (!$resultado['ok']) {
+                        $error = $resultado['error'];
+                    } else {
+                        $this->connection->update($definition['table'], $resultado['payload'], [$pk => $id]);
+                        $this->addFlash('success', sprintf('%s actualizado correctamente.', $definition['singular']));
 
-                return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                        return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                    }
+                } else {
+                    $payload = $this->registry->payloadFor($definition, $data, patch: true, form: true);
+                    $this->connection->update($definition['table'], $payload, [$pk => $id]);
+                    $this->addFlash('success', sprintf('%s actualizado correctamente.', $definition['singular']));
+
+                    return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                }
             } catch (DbalException $exception) {
                 $error = $exception->getPrevious()?->getMessage() ?? $exception->getMessage();
             }

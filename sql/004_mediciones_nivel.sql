@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS mediciones_nivel (
     distancia_medida_cm NUMERIC(8,2) NOT NULL,
     profundidad_cm NUMERIC(8,2) NOT NULL,
     msnm NUMERIC(8,2) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_mediciones_nivel_fecha

@@ -340,7 +340,9 @@ final class SocioPortalController extends AbstractController
         }
 
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT * FROM cnb_app.embarcaciones WHERE numero_socio = ? ORDER BY nombre ASC',
+            "SELECT * FROM cnb_app.embarcaciones
+             WHERE numero_socio = ? AND estado = 'activa'
+             ORDER BY nombre ASC",
             [$socio['numero_socio']]
         );
 
@@ -360,6 +362,85 @@ final class SocioPortalController extends AbstractController
         );
 
         return $this->json(['data' => array_map($this->registry->normalizeRow(...), $rows)]);
+    }
+
+    #[Route('/reservas-varadero/disponibilidad', name: 'api_socio_reservas_disponibilidad', methods: ['GET'])]
+    public function disponibilidadVaradero(Request $request): JsonResponse
+    {
+        $socio = $this->authenticate($request);
+        if ($socio instanceof JsonResponse) {
+            return $socio;
+        }
+
+        $espacioId = (int) $request->query->get('espacio_id', 0);
+        $desde = trim((string) $request->query->get('desde', ''));
+        $hasta = trim((string) $request->query->get('hasta', ''));
+
+        if ($espacioId < 1) {
+            return $this->json(['error' => 'espacio_id es obligatorio'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if ($desde === '' || $hasta === '') {
+            $hoy = new \DateTimeImmutable('today');
+            $desde = $desde !== '' ? $desde : $hoy->format('Y-m-d');
+            $hasta = $hasta !== '' ? $hasta : $hoy->modify('+6 months')->format('Y-m-d');
+        }
+
+        try {
+            $espacio = $this->connection->fetchAssociative(
+                'SELECT id, codigo, eslora_max_m, manga_max_m, activo
+                 FROM cnb_app.espacios_varadero
+                 WHERE id = ?',
+                [$espacioId]
+            );
+
+            if (!$espacio || !$this->isTruthy($espacio['activo'] ?? false)) {
+                return $this->json(['error' => 'Espacio de varadero no disponible'], Response::HTTP_NOT_FOUND);
+            }
+
+            $ocupaciones = $this->connection->fetchAllAssociative(
+                "SELECT fecha_inicio, fecha_fin, estado
+                 FROM cnb_app.reservas_varadero
+                 WHERE espacio_id = ?
+                   AND estado IN ('pendiente', 'confirmada', 'en_curso')
+                   AND fecha_inicio <= ?
+                   AND fecha_fin >= ?
+                 ORDER BY fecha_inicio ASC",
+                [$espacioId, $hasta, $desde]
+            );
+
+            $anio = (int) (new \DateTimeImmutable($desde))->format('Y');
+            $diasUsados = (int) $this->connection->fetchOne(
+                "SELECT COALESCE(SUM(cantidad_dias), 0)
+                 FROM cnb_app.reservas_varadero
+                 WHERE numero_socio = ?
+                   AND estado IN ('pendiente', 'confirmada', 'en_curso', 'finalizada')
+                   AND EXTRACT(YEAR FROM fecha_inicio) = ?",
+                [$socio['numero_socio'], $anio]
+            );
+
+            return $this->json([
+                'data' => [
+                    'espacio' => $this->registry->normalizeRow($espacio),
+                    'desde' => $desde,
+                    'hasta' => $hasta,
+                    'ocupaciones' => array_map(
+                        static fn (array $row): array => [
+                            'fecha_inicio' => substr((string) $row['fecha_inicio'], 0, 10),
+                            'fecha_fin' => substr((string) $row['fecha_fin'], 0, 10),
+                            'estado' => $row['estado'],
+                        ],
+                        $ocupaciones
+                    ),
+                    'dias_usados_anio' => $diasUsados,
+                    'dias_maximos_anio' => 15,
+                    'dias_restantes_anio' => max(0, 15 - $diasUsados),
+                    'dias_maximos_reserva' => 15,
+                ],
+            ]);
+        } catch (DbalException $exception) {
+            return $this->dbalError($exception);
+        }
     }
 
     #[Route('/reservas-varadero', name: 'api_socio_reservas_index', methods: ['GET'])]
@@ -394,13 +475,80 @@ final class SocioPortalController extends AbstractController
             }
         }
 
+        $embarcacionId = (int) $data['embarcacion_id'];
+        $espacioId = (int) $data['espacio_id'];
+        $fechaInicio = (string) $data['fecha_inicio'];
+        $fechaFin = (string) $data['fecha_fin'];
+
         try {
+            $embarcacion = $this->connection->fetchAssociative(
+                'SELECT id, numero_socio, nombre, eslora_m, estado
+                 FROM cnb_app.embarcaciones
+                 WHERE id = ?',
+                [$embarcacionId]
+            );
+
+            if (!$embarcacion) {
+                return $this->json(['error' => 'Embarcacion no encontrada'], Response::HTTP_NOT_FOUND);
+            }
+
+            if ((int) ($embarcacion['numero_socio'] ?? 0) !== (int) $socio['numero_socio']) {
+                return $this->json(
+                    ['error' => 'La embarcacion no pertenece al socio autenticado'],
+                    Response::HTTP_FORBIDDEN
+                );
+            }
+
+            if (($embarcacion['estado'] ?? '') !== 'activa') {
+                return $this->json(
+                    ['error' => 'La embarcacion no esta activa para reservar varadero'],
+                    Response::HTTP_BAD_REQUEST
+                );
+            }
+
+            $espacio = $this->connection->fetchAssociative(
+                'SELECT id, eslora_max_m, activo FROM cnb_app.espacios_varadero WHERE id = ?',
+                [$espacioId]
+            );
+
+            if (!$espacio || !$this->isTruthy($espacio['activo'] ?? false)) {
+                return $this->json(['error' => 'Espacio de varadero no disponible'], Response::HTTP_BAD_REQUEST);
+            }
+
+            $inicio = new \DateTimeImmutable($fechaInicio);
+            $fin = new \DateTimeImmutable($fechaFin);
+            if ($fin < $inicio) {
+                return $this->json(['error' => 'fecha_fin debe ser posterior o igual a fecha_inicio'], Response::HTTP_BAD_REQUEST);
+            }
+
+            $dias = (int) $inicio->diff($fin)->days + 1;
+            if ($dias > 15) {
+                return $this->json(['error' => 'La reserva no puede superar 15 dias'], Response::HTTP_BAD_REQUEST);
+            }
+
+            $solape = $this->connection->fetchOne(
+                "SELECT id FROM cnb_app.reservas_varadero
+                 WHERE espacio_id = ?
+                   AND estado IN ('pendiente', 'confirmada', 'en_curso')
+                   AND fecha_inicio <= ?
+                   AND fecha_fin >= ?
+                 LIMIT 1",
+                [$espacioId, $fechaFin, $fechaInicio]
+            );
+
+            if ($solape) {
+                return $this->json(
+                    ['error' => 'El espacio de varadero no esta disponible en ese rango'],
+                    Response::HTTP_CONFLICT
+                );
+            }
+
             $payload = [
                 'numero_socio' => $socio['numero_socio'],
-                'embarcacion_id' => (int) $data['embarcacion_id'],
-                'espacio_id' => (int) $data['espacio_id'],
-                'fecha_inicio' => $data['fecha_inicio'],
-                'fecha_fin' => $data['fecha_fin'],
+                'embarcacion_id' => $embarcacionId,
+                'espacio_id' => $espacioId,
+                'fecha_inicio' => $fechaInicio,
+                'fecha_fin' => $fechaFin,
                 'motivo' => $data['motivo'] ?? 'limpieza_mantenimiento',
                 'observaciones' => $data['observaciones'] ?? null,
                 'estado' => 'pendiente',
@@ -413,6 +561,8 @@ final class SocioPortalController extends AbstractController
             return $this->json(['data' => $this->registry->normalizeRow($row)], Response::HTTP_CREATED);
         } catch (DbalException $exception) {
             return $this->dbalError($exception);
+        } catch (\Exception $exception) {
+            return $this->json(['error' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
         }
     }
 
@@ -430,16 +580,22 @@ final class SocioPortalController extends AbstractController
         }
 
         try {
+            $now = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format(DATE_ATOM);
             $payload = [
                 'numero_socio' => $socio['numero_socio'],
                 'asunto' => $data['asunto'],
                 'mensaje' => $data['mensaje'],
                 'fecha_preferida' => $data['fecha_preferida'] ?? null,
                 'estado' => 'pendiente',
+                'created_at' => $now,
+                'updated_at' => $now,
             ];
             $row = $this->connection->fetchAssociative(
-                'INSERT INTO cnb_app.solicitudes_reunion_cd (numero_socio, asunto, mensaje, fecha_preferida, estado)
-                 VALUES (:numero_socio, :asunto, :mensaje, :fecha_preferida, :estado) RETURNING *',
+                'INSERT INTO cnb_app.solicitudes_reunion_cd
+                    (numero_socio, asunto, mensaje, fecha_preferida, estado, created_at, updated_at)
+                 VALUES
+                    (:numero_socio, :asunto, :mensaje, :fecha_preferida, :estado, :created_at, :updated_at)
+                 RETURNING *',
                 $payload
             ) ?: [];
 
@@ -463,15 +619,18 @@ final class SocioPortalController extends AbstractController
         }
 
         try {
+            $now = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format(DATE_ATOM);
             $payload = [
                 'numero_socio' => $socio['numero_socio'],
                 'asunto' => $data['asunto'],
                 'mensaje' => $data['mensaje'],
                 'estado' => 'recibida',
+                'created_at' => $now,
+                'updated_at' => $now,
             ];
             $row = $this->connection->fetchAssociative(
-                'INSERT INTO cnb_app.notas_cd (numero_socio, asunto, mensaje, estado)
-                 VALUES (:numero_socio, :asunto, :mensaje, :estado) RETURNING *',
+                'INSERT INTO cnb_app.notas_cd (numero_socio, asunto, mensaje, estado, created_at, updated_at)
+                 VALUES (:numero_socio, :asunto, :mensaje, :estado, :created_at, :updated_at) RETURNING *',
                 $payload
             ) ?: [];
 
@@ -557,6 +716,7 @@ final class SocioPortalController extends AbstractController
                 'resultado' => $resultado,
                 'puntaje_facial' => $score,
                 'observaciones' => $observaciones,
+                'created_at' => (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format(DATE_ATOM),
             ]);
 
             if (!$reference) {
@@ -684,6 +844,21 @@ final class SocioPortalController extends AbstractController
         }
 
         return $fingerprint;
+    }
+
+    private function isTruthy(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (int) $value === 1;
+        }
+
+        $normalized = strtolower(trim((string) $value));
+
+        return in_array($normalized, ['1', 't', 'true', 'yes', 'on'], true);
     }
 
     /**

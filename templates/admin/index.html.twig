@@ -10,7 +10,11 @@
         </div>
         <div class="d-flex gap-2">
             <a class="btn btn-outline-secondary" href="{{ path('admin_dashboard') }}">Volver</a>
-            <a class="btn btn-primary" href="{{ path('admin_resource_new', {resource: resource}) }}">Nuevo</a>
+            {% if resource == 'reservas-varadero' %}
+                <a class="btn btn-primary" href="{{ path('admin_varadero') }}">Planificador</a>
+            {% else %}
+                <a class="btn btn-primary" href="{{ path('admin_resource_new', {resource: resource}) }}">Nuevo</a>
+            {% endif %}
         </div>
     </div>
 

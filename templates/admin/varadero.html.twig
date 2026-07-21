@@ -1,0 +1,618 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Planificador de varadero - CNB{% endblock %}
+
+{% block stylesheets %}
+    <style>
+        .var-calendar {
+            user-select: none;
+        }
+        .var-cal-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+        }
+        .var-cal-dow {
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #6c7a89;
+            padding: 0.25rem 0;
+        }
+        .var-cal-day {
+            aspect-ratio: 1;
+            border: 1px solid #d9e2ec;
+            border-radius: 0.4rem;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            cursor: pointer;
+            position: relative;
+        }
+        .var-cal-day:hover:not(.is-muted):not(.is-occupied) {
+            border-color: #002147;
+            background: #e8eef5;
+        }
+        .var-cal-day.is-muted {
+            color: #adb5bd;
+            background: #f8f9fa;
+            cursor: default;
+        }
+        .var-cal-day.is-occupied {
+            background: #f8d7da;
+            border-color: #f1aeb5;
+            color: #842029;
+            cursor: not-allowed;
+        }
+        .var-cal-day.is-in-range {
+            background: #cfe2ff;
+            border-color: #9ec5fe;
+        }
+        .var-cal-day.is-selected {
+            background: #002147;
+            border-color: #002147;
+            color: #fff;
+            font-weight: 700;
+        }
+        .var-cal-day.is-today::after {
+            content: '';
+            position: absolute;
+            bottom: 3px;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #0d6efd;
+        }
+        .var-cal-day.is-selected.is-today::after {
+            background: #fff;
+        }
+
+        .var-timeline-wrap {
+            overflow-x: auto;
+            border: 1px solid #d9e2ec;
+            border-radius: 0.5rem;
+            background: #fff;
+        }
+        .var-timeline {
+            min-width: 900px;
+            display: grid;
+            grid-template-columns: 140px 1fr;
+        }
+        .var-tl-head, .var-tl-row {
+            display: contents;
+        }
+        .var-tl-label {
+            padding: 0.65rem 0.75rem;
+            border-bottom: 1px solid #e9ecef;
+            border-right: 1px solid #e9ecef;
+            font-weight: 600;
+            background: #f8fafc;
+            position: sticky;
+            left: 0;
+            z-index: 2;
+        }
+        .var-tl-days {
+            display: grid;
+            border-bottom: 1px solid #e9ecef;
+            position: relative;
+            min-height: 52px;
+        }
+        .var-tl-day {
+            border-right: 1px solid #f1f3f5;
+            font-size: 0.68rem;
+            color: #6c7a89;
+            text-align: center;
+            padding-top: 0.2rem;
+        }
+        .var-tl-day.is-weekend {
+            background: #f8f9fa;
+        }
+        .var-tl-day.is-today {
+            background: #e7f1ff;
+        }
+        .var-tl-track {
+            position: relative;
+            min-height: 52px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .var-tl-bar {
+            position: absolute;
+            top: 14px;
+            height: 24px;
+            border-radius: 0.35rem;
+            font-size: 0.68rem;
+            line-height: 24px;
+            padding: 0 0.4rem;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            color: #fff;
+            cursor: default;
+        }
+        .var-tl-bar.estado-pendiente { background: #fd7e14; }
+        .var-tl-bar.estado-confirmada { background: #0d6efd; }
+        .var-tl-bar.estado-en_curso { background: #198754; }
+        .var-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            margin-right: 0.85rem;
+            font-size: 0.85rem;
+        }
+        .var-legend i {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+        .var-status {
+            min-height: 1.5rem;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-1">Planificador de varadero</h1>
+            <p class="text-muted mb-0">Calendario, disponibilidad por espacio y validacion de propiedad de la embarcacion.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary" href="{{ path('admin_dashboard') }}">Panel</a>
+            <a class="btn btn-outline-primary" href="{{ path('admin_resource_index', {resource: 'reservas-varadero'}) }}">Listado</a>
+        </div>
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <div class="row g-3">
+        <div class="col-12 col-xl-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Nueva reserva</h2>
+                    <form method="post" id="varadero-form" class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label" for="numero_socio">Socio</label>
+                            <select class="form-select" id="numero_socio" name="numero_socio" required>
+                                <option value="">Seleccionar socio</option>
+                                {% for socio in socios %}
+                                    <option value="{{ socio.id }}" {% if data.numero_socio == socio.id %}selected{% endif %}>{{ socio.label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label" for="embarcacion_id">Embarcacion del socio</label>
+                            <select class="form-select" id="embarcacion_id" name="embarcacion_id" required>
+                                <option value="">Seleccionar embarcacion</option>
+                                {% for barco in embarcaciones %}
+                                    <option value="{{ barco.id }}" data-eslora="{{ barco.eslora_m }}" {% if data.embarcacion_id == barco.id %}selected{% endif %}>{{ barco.label }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Solo se listan embarcaciones activas del socio.</div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label" for="espacio_id">Espacio</label>
+                            <select class="form-select" id="espacio_id" name="espacio_id" required>
+                                <option value="">Seleccionar espacio</option>
+                                {% for espacio in espacios %}
+                                    <option value="{{ espacio.id }}" data-eslora-max="{{ espacio.eslora_max_m }}" {% if data.espacio_id == espacio.id %}selected{% endif %}>{{ espacio.label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label mb-0">Desde / Hasta</label>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary" id="cal-prev">&larr;</button>
+                                    <button type="button" class="btn btn-outline-secondary" id="cal-month-label" disabled>Mes</button>
+                                    <button type="button" class="btn btn-outline-secondary" id="cal-next">&rarr;</button>
+                                </div>
+                            </div>
+                            <div class="var-calendar" id="var-calendar"></div>
+                            <input type="hidden" name="fecha_inicio" id="fecha_inicio" value="{{ data.fecha_inicio }}" required>
+                            <input type="hidden" name="fecha_fin" id="fecha_fin" value="{{ data.fecha_fin }}" required>
+                            <div class="mt-2 small text-muted" id="range-summary">Seleccioná el día de inicio y luego el de fin en el calendario.</div>
+                            <div class="var-status small mt-1" id="availability-status"></div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="estado">Estado</label>
+                            <select class="form-select" id="estado" name="estado">
+                                {% for value, label in {
+                                    pendiente: 'Pendiente',
+                                    confirmada: 'Confirmada',
+                                    en_curso: 'En curso'
+                                } %}
+                                    <option value="{{ value }}" {% if data.estado == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label" for="motivo">Motivo</label>
+                            <input class="form-control" id="motivo" name="motivo" value="{{ data.motivo }}" required>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label" for="observaciones">Observaciones</label>
+                            <textarea class="form-control" id="observaciones" name="observaciones" rows="2">{{ data.observaciones }}</textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <button class="btn btn-primary" type="submit" id="btn-guardar">Crear reserva</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-8">
+            <div class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                        <div>
+                            <h2 class="h5 mb-0">Timeline de espacios</h2>
+                            <p class="text-muted small mb-0">Reservas pendientes, confirmadas y en curso.</p>
+                        </div>
+                        <div class="d-flex gap-2 align-items-center">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="tl-prev">Anterior</button>
+                            <span class="small fw-semibold" id="tl-range-label"></span>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="tl-next">Siguiente</button>
+                        </div>
+                    </div>
+                    <div class="var-legend mb-2">
+                        <span><i style="background:#fd7e14"></i> Pendiente</span>
+                        <span><i style="background:#0d6efd"></i> Confirmada</span>
+                        <span><i style="background:#198754"></i> En curso</span>
+                        <span><i style="background:#f8d7da;border:1px solid #f1aeb5"></i> Ocupado (calendario)</span>
+                    </div>
+                    <div class="var-timeline-wrap">
+                        <div class="var-timeline" id="var-timeline"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const urls = {
+        embarcaciones: {{ path('admin_varadero_embarcaciones')|json_encode|raw }},
+        disponibilidad: {{ path('admin_varadero_disponibilidad')|json_encode|raw }},
+        timeline: {{ path('admin_varadero_timeline')|json_encode|raw }},
+    };
+    const diasMaxReserva = {{ dias_max_reserva }};
+    const initialTimeline = {{ timeline|json_encode(constant('JSON_UNESCAPED_UNICODE'))|raw }};
+
+    const socioSelect = document.getElementById('numero_socio');
+    const barcoSelect = document.getElementById('embarcacion_id');
+    const espacioSelect = document.getElementById('espacio_id');
+    const fechaInicioInput = document.getElementById('fecha_inicio');
+    const fechaFinInput = document.getElementById('fecha_fin');
+    const rangeSummary = document.getElementById('range-summary');
+    const availabilityStatus = document.getElementById('availability-status');
+    const calendarEl = document.getElementById('var-calendar');
+    const monthLabelBtn = document.getElementById('cal-month-label');
+    const timelineEl = document.getElementById('var-timeline');
+    const tlRangeLabel = document.getElementById('tl-range-label');
+
+    let viewMonth = new Date((fechaInicioInput.value || new Date().toISOString().slice(0,10)) + 'T12:00:00');
+    viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
+    let selectingEnd = false;
+    let occupiedRanges = [];
+    let timelineData = initialTimeline;
+    let timelineDesde = new Date(initialTimeline.desde + 'T12:00:00');
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const parseISO = (s) => new Date(s + 'T12:00:00');
+    const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+    const daysBetween = (a, b) => Math.round((parseISO(b) - parseISO(a)) / 86400000) + 1;
+    const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    function dayInRanges(iso) {
+        const d = parseISO(iso);
+        return occupiedRanges.some(r => d >= parseISO(r.fecha_inicio) && d <= parseISO(r.fecha_fin));
+    }
+
+    function rangeOverlapsOccupied(inicio, fin) {
+        const a = parseISO(inicio);
+        const b = parseISO(fin);
+        return occupiedRanges.some(r => a <= parseISO(r.fecha_fin) && b >= parseISO(r.fecha_inicio));
+    }
+
+    function updateRangeSummary() {
+        const inicio = fechaInicioInput.value;
+        const fin = fechaFinInput.value;
+        if (!inicio || !fin) {
+            rangeSummary.textContent = 'Seleccioná el día de inicio y luego el de fin en el calendario.';
+            return;
+        }
+        const dias = daysBetween(inicio, fin);
+        rangeSummary.textContent = `Desde ${inicio} hasta ${fin} (${dias} día${dias === 1 ? '' : 's'}). Máximo ${diasMaxReserva} días por reserva.`;
+    }
+
+    function setAvailabilityMessage(text, ok) {
+        availabilityStatus.textContent = text || '';
+        availabilityStatus.className = 'var-status small mt-1 ' + (text ? (ok ? 'text-success' : 'text-danger') : '');
+    }
+
+    async function loadEmbarcaciones() {
+        const numero = socioSelect.value;
+        const previous = barcoSelect.value;
+        barcoSelect.innerHTML = '<option value="">Seleccionar embarcacion</option>';
+        if (!numero) return;
+        const res = await fetch(`${urls.embarcaciones}?numero_socio=${encodeURIComponent(numero)}`);
+        const json = await res.json();
+        (json.data || []).forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.id;
+            opt.textContent = item.label;
+            if (item.eslora_m != null) opt.dataset.eslora = item.eslora_m;
+            if (String(item.id) === String(previous)) opt.selected = true;
+            barcoSelect.appendChild(opt);
+        });
+        await refreshAvailability();
+    }
+
+    async function refreshAvailability() {
+        const espacioId = espacioSelect.value;
+        const numero = socioSelect.value;
+        occupiedRanges = [];
+        if (!espacioId) {
+            setAvailabilityMessage('Elegí un espacio para ver ocupación en el calendario.', true);
+            renderCalendar();
+            return;
+        }
+        const desde = toISO(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1));
+        const hasta = toISO(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 2, 0));
+        const qs = new URLSearchParams({
+            espacio_id: espacioId,
+            desde,
+            hasta,
+        });
+        if (numero) qs.set('numero_socio', numero);
+        const res = await fetch(`${urls.disponibilidad}?${qs}`);
+        const json = await res.json();
+        occupiedRanges = (json.data && json.data.ocupaciones) || [];
+        const restantes = json.data ? json.data.dias_restantes_anio : null;
+        if (restantes != null && numero) {
+            setAvailabilityMessage(`Cupo anual del socio: ${restantes} día(s) restante(s).`, restantes > 0);
+        } else {
+            setAvailabilityMessage(`${occupiedRanges.length} ocupación(es) visibles en el calendario.`, true);
+        }
+        validateSelection();
+        renderCalendar();
+    }
+
+    function validateSelection() {
+        const inicio = fechaInicioInput.value;
+        const fin = fechaFinInput.value;
+        const espacioId = espacioSelect.value;
+        const barcoOpt = barcoSelect.selectedOptions[0];
+        const espacioOpt = espacioSelect.selectedOptions[0];
+
+        if (inicio && fin) {
+            const dias = daysBetween(inicio, fin);
+            if (dias > diasMaxReserva) {
+                setAvailabilityMessage(`El rango supera el máximo de ${diasMaxReserva} días.`, false);
+                return false;
+            }
+            if (fin < inicio) {
+                setAvailabilityMessage('La fecha hasta debe ser posterior o igual a desde.', false);
+                return false;
+            }
+            if (espacioId && rangeOverlapsOccupied(inicio, fin)) {
+                setAvailabilityMessage('El espacio no está disponible en ese rango.', false);
+                return false;
+            }
+        }
+
+        if (barcoOpt && espacioOpt && barcoOpt.dataset.eslora && espacioOpt.dataset.esloraMax) {
+            if (parseFloat(barcoOpt.dataset.eslora) > parseFloat(espacioOpt.dataset.esloraMax)) {
+                setAvailabilityMessage('La eslora de la embarcación supera el máximo del espacio.', false);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    function renderCalendar() {
+        const year = viewMonth.getFullYear();
+        const month = viewMonth.getMonth();
+        monthLabelBtn.textContent = `${monthNames[month]} ${year}`;
+
+        const first = new Date(year, month, 1);
+        const startOffset = (first.getDay() + 6) % 7;
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const today = toISO(new Date());
+        const inicio = fechaInicioInput.value;
+        const fin = fechaFinInput.value;
+
+        calendarEl.innerHTML = '';
+        const dow = document.createElement('div');
+        dow.className = 'var-cal-grid mb-1';
+        ['Lu','Ma','Mi','Ju','Vi','Sa','Do'].forEach(d => {
+            const el = document.createElement('div');
+            el.className = 'var-cal-dow';
+            el.textContent = d;
+            dow.appendChild(el);
+        });
+        calendarEl.appendChild(dow);
+
+        const grid = document.createElement('div');
+        grid.className = 'var-cal-grid';
+
+        for (let i = 0; i < startOffset; i++) {
+            const empty = document.createElement('div');
+            empty.className = 'var-cal-day is-muted';
+            grid.appendChild(empty);
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const iso = `${year}-${pad(month+1)}-${pad(day)}`;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'var-cal-day';
+            btn.textContent = String(day);
+            btn.dataset.date = iso;
+
+            if (iso === today) btn.classList.add('is-today');
+            if (dayInRanges(iso)) btn.classList.add('is-occupied');
+            if (iso === inicio || iso === fin) btn.classList.add('is-selected');
+            else if (inicio && fin && iso > inicio && iso < fin) btn.classList.add('is-in-range');
+
+            btn.addEventListener('click', () => onDayClick(iso));
+            grid.appendChild(btn);
+        }
+
+        calendarEl.appendChild(grid);
+        updateRangeSummary();
+    }
+
+    function onDayClick(iso) {
+        if (dayInRanges(iso) && espacioSelect.value) {
+            setAvailabilityMessage('Ese día está ocupado en el espacio seleccionado.', false);
+            return;
+        }
+
+        if (!fechaInicioInput.value || !selectingEnd || iso < fechaInicioInput.value) {
+            fechaInicioInput.value = iso;
+            fechaFinInput.value = iso;
+            selectingEnd = true;
+        } else {
+            const dias = daysBetween(fechaInicioInput.value, iso);
+            if (dias > diasMaxReserva) {
+                setAvailabilityMessage(`Máximo ${diasMaxReserva} días por reserva.`, false);
+                return;
+            }
+            if (rangeOverlapsOccupied(fechaInicioInput.value, iso)) {
+                setAvailabilityMessage('El rango elegido solapa una reserva existente.', false);
+                return;
+            }
+            fechaFinInput.value = iso;
+            selectingEnd = false;
+        }
+
+        validateSelection();
+        renderCalendar();
+    }
+
+    function renderTimeline(data) {
+        timelineData = data;
+        const desde = parseISO(data.desde);
+        const totalDays = daysBetween(data.desde, data.hasta);
+        timelineDesde = desde;
+        tlRangeLabel.textContent = `${data.desde} → ${data.hasta}`;
+
+        timelineEl.innerHTML = '';
+
+        const headLabel = document.createElement('div');
+        headLabel.className = 'var-tl-label';
+        headLabel.textContent = 'Espacio';
+        const headDays = document.createElement('div');
+        headDays.className = 'var-tl-days';
+        headDays.style.gridTemplateColumns = `repeat(${totalDays}, minmax(22px, 1fr))`;
+
+        for (let i = 0; i < totalDays; i++) {
+            const d = addDays(desde, i);
+            const cell = document.createElement('div');
+            cell.className = 'var-tl-day';
+            if (d.getDay() === 0 || d.getDay() === 6) cell.classList.add('is-weekend');
+            if (toISO(d) === toISO(new Date())) cell.classList.add('is-today');
+            cell.textContent = `${d.getDate()}/${d.getMonth()+1}`;
+            headDays.appendChild(cell);
+        }
+
+        timelineEl.appendChild(headLabel);
+        timelineEl.appendChild(headDays);
+
+        (data.espacios || []).forEach(espacio => {
+            const label = document.createElement('div');
+            label.className = 'var-tl-label';
+            label.innerHTML = `${espacio.codigo}<div class="small fw-normal text-muted">${espacio.eslora_max_m ?? '-'}m${espacio.activo ? '' : ' · inactivo'}</div>`;
+
+            const track = document.createElement('div');
+            track.className = 'var-tl-track';
+            track.style.backgroundImage = `repeating-linear-gradient(to right, transparent 0, transparent calc(100%/${totalDays} - 1px), #f1f3f5 calc(100%/${totalDays} - 1px), #f1f3f5 calc(100%/${totalDays}))`;
+
+            (espacio.reservas || []).forEach(reserva => {
+                let start = daysBetween(data.desde, reserva.fecha_inicio) - 1;
+                let endExclusive = daysBetween(data.desde, reserva.fecha_fin);
+                if (reserva.fecha_inicio < data.desde) start = 0;
+                if (reserva.fecha_fin > data.hasta) endExclusive = totalDays;
+                if (endExclusive <= 0 || start >= totalDays) return;
+                const widthDays = Math.max(1, endExclusive - Math.max(0, start));
+                const left = Math.max(0, start);
+                const bar = document.createElement('div');
+                bar.className = `var-tl-bar estado-${reserva.estado}`;
+                bar.style.left = `calc(${left} * 100% / ${totalDays})`;
+                bar.style.width = `calc(${widthDays} * 100% / ${totalDays} - 2px)`;
+                bar.title = `#${reserva.id} ${reserva.socio} · ${reserva.embarcacion} · ${reserva.fecha_inicio} a ${reserva.fecha_fin} (${reserva.estado})`;
+                bar.textContent = `${reserva.embarcacion} · #${reserva.numero_socio}`;
+                track.appendChild(bar);
+            });
+
+            timelineEl.appendChild(label);
+            timelineEl.appendChild(track);
+        });
+    }
+
+    async function loadTimeline(fromDate) {
+        const desde = toISO(fromDate);
+        const hasta = toISO(addDays(fromDate, 41));
+        const res = await fetch(`${urls.timeline}?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`);
+        const json = await res.json();
+        renderTimeline(json.data);
+    }
+
+    socioSelect.addEventListener('change', () => { loadEmbarcaciones(); });
+    espacioSelect.addEventListener('change', () => { refreshAvailability(); });
+    barcoSelect.addEventListener('change', () => validateSelection());
+
+    document.getElementById('cal-prev').addEventListener('click', () => {
+        viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1);
+        refreshAvailability();
+    });
+    document.getElementById('cal-next').addEventListener('click', () => {
+        viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1);
+        refreshAvailability();
+    });
+    document.getElementById('tl-prev').addEventListener('click', () => {
+        loadTimeline(addDays(timelineDesde, -21));
+    });
+    document.getElementById('tl-next').addEventListener('click', () => {
+        loadTimeline(addDays(timelineDesde, 21));
+    });
+
+    document.getElementById('varadero-form').addEventListener('submit', (e) => {
+        if (!validateSelection()) {
+            e.preventDefault();
+            return;
+        }
+        if (!fechaInicioInput.value || !fechaFinInput.value) {
+            e.preventDefault();
+            setAvailabilityMessage('Seleccioná el rango de fechas en el calendario.', false);
+        }
+    });
+
+    renderCalendar();
+    renderTimeline(initialTimeline);
+    if (espacioSelect.value) {
+        refreshAvailability();
+    } else {
+        setAvailabilityMessage('Elegí un espacio para ver ocupación en el calendario.', true);
+    }
+});
+</script>
+{% endblock %}

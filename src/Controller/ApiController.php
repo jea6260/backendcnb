@@ -132,6 +132,37 @@ final class ApiController extends AbstractController
     public function index(string $resource, Request $request): JsonResponse
     {
         $definition = $this->registry->get($resource);
+
+        if ($resource === 'embarcaciones') {
+            $numeroSocio = $request->query->get('numeroSocio') ?? $request->query->get('socioId');
+            $ambito = $request->query->get('ambito');
+            $rows = $this->registry->fetchEmbarcacionesApi(
+                $this->connection,
+                $numeroSocio !== null && $numeroSocio !== '' ? (int) $numeroSocio : null,
+                is_string($ambito) ? $ambito : null,
+            );
+
+            return $this->json(['data' => $rows]);
+        }
+
+        if (\in_array($resource, ['ubicaciones', 'estados-padron'], true)) {
+            $pk = $this->registry->primaryKey($definition);
+            $query = $this->connection->createQueryBuilder()
+                ->select('*')
+                ->from($definition['table'])
+                ->orderBy($pk, 'ASC')
+                ->setMaxResults(500);
+
+            if ($request->query->getBoolean('soloActivos', true) && isset($definition['fields']['activo'])) {
+                $query->andWhere('activo = TRUE');
+            }
+            if ($resource === 'ubicaciones' && $request->query->has('ambito')) {
+                $query->andWhere('ambito = :ambito')->setParameter('ambito', $request->query->get('ambito'));
+            }
+
+            return $this->json(['data' => array_map($this->registry->normalizeRow(...), $query->fetchAllAssociative())]);
+        }
+
         $pk = $this->registry->primaryKey($definition);
         $query = $this->connection->createQueryBuilder()
             ->select('*')

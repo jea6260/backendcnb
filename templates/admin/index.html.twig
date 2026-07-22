@@ -96,6 +96,8 @@
                                 <td>
                                     {% if field.type == 'boolean' %}
                                         {{ value ? 'Si' : 'No' }}
+                                    {% elseif field.type == 'relation' %}
+                                        {{ attribute(row, name ~ '_label')|default(value) }}
                                     {% elseif field.type == 'choice' and field.choices[value] is defined %}
                                         {{ field.choices[value] }}
                                     {% else %}

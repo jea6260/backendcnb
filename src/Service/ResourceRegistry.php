@@ -58,22 +58,59 @@ final class ResourceRegistry
                 'table' => 'embarcaciones',
                 'label' => 'Embarcaciones',
                 'singular' => 'Embarcacion',
-                'description' => 'Embarcaciones de socios y del club.',
+                'description' => 'Padron de embarcaciones (planilla Propietarios Marinas: Agua / Tierra).',
                 'fields' => [
-                    'numero_socio' => ['label' => 'Socio propietario', 'type' => 'relation', 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'ambito' => ['label' => 'Ambito', 'type' => 'choice', 'required' => true, 'default' => 'agua', 'list' => true, 'choices' => [
+                        'agua' => 'Agua',
+                        'tierra' => 'Tierra',
+                    ]],
+                    'numero_socio' => ['label' => 'Nro socio', 'type' => 'relation', 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'tipo' => ['label' => 'Tipo', 'type' => 'text', 'required' => true, 'default' => 'velero', 'list' => true],
+                    'modelo' => ['label' => 'Modelo', 'type' => 'text', 'list' => true],
                     'nombre' => ['label' => 'Nombre', 'type' => 'text', 'required' => true, 'list' => true],
                     'matricula' => ['label' => 'Matricula', 'type' => 'text', 'list' => true],
-                    'tipo' => ['label' => 'Tipo', 'type' => 'text', 'required' => true, 'default' => 'velero', 'list' => true],
-                    'eslora_m' => ['label' => 'Eslora (m)', 'type' => 'decimal', 'required' => true, 'list' => true],
-                    'manga_m' => ['label' => 'Manga (m)', 'type' => 'decimal'],
-                    'calado_m' => ['label' => 'Calado (m)', 'type' => 'decimal'],
-                    'es_cnb' => ['label' => 'Propiedad CNB', 'type' => 'boolean', 'default' => false, 'list' => true],
-                    'estado' => ['label' => 'Estado', 'type' => 'choice', 'required' => true, 'default' => 'activa', 'list' => true, 'choices' => [
+                    'eslora_m' => ['label' => 'Eslora (m)', 'type' => 'decimal', 'list' => true],
+                    'manga_m' => ['label' => 'Manga (m)', 'type' => 'decimal', 'list' => true],
+                    'm2_matricula' => ['label' => 'M2 x matricula', 'type' => 'decimal', 'list' => true],
+                    'metros_comprados' => ['label' => 'Mts comprados', 'type' => 'decimal', 'list' => true],
+                    'paga_expensas_m2' => ['label' => 'Paga expensas (m2)', 'type' => 'decimal', 'list' => true],
+                    'ubicacion_id' => ['label' => 'Ubicacion', 'type' => 'relation', 'list' => true, 'relation' => ['table' => 'ubicaciones', 'label' => "ambito || ' · ' || nombre", 'active_only' => true]],
+                    'observaciones' => ['label' => 'Observaciones', 'type' => 'textarea'],
+                    'eslora_medida_m' => ['label' => 'Eslora medida (m)', 'type' => 'decimal'],
+                    'manga_medida_m' => ['label' => 'Manga medida (m)', 'type' => 'decimal'],
+                    'm2_medidos' => ['label' => 'M2 medidos', 'type' => 'decimal'],
+                    'estado' => ['label' => 'Estado operativo', 'type' => 'choice', 'required' => true, 'default' => 'activa', 'list' => true, 'choices' => [
                         'activa' => 'Activa',
                         'mantenimiento' => 'Mantenimiento',
                         'inactiva' => 'Inactiva',
                     ]],
-                    'observaciones' => ['label' => 'Observaciones', 'type' => 'textarea'],
+                    'estado_padron_id' => ['label' => 'Estado padron', 'type' => 'relation', 'list' => true, 'relation' => ['table' => 'estados_padron', 'label' => 'nombre', 'active_only' => true]],
+                    'es_cnb' => ['label' => 'Propiedad CNB', 'type' => 'boolean', 'default' => false],
+                    'calado_m' => ['label' => 'Calado (m)', 'type' => 'decimal'],
+                ],
+            ],
+            'estados-padron' => [
+                'table' => 'estados_padron',
+                'label' => 'Estados padron',
+                'singular' => 'Estado padron',
+                'description' => 'Estados del padron de embarcaciones (Revisado OK, Firmado, etc.).',
+                'fields' => [
+                    'nombre' => ['label' => 'Nombre', 'type' => 'text', 'required' => true, 'list' => true],
+                    'activo' => ['label' => 'Activo', 'type' => 'boolean', 'default' => true, 'list' => true],
+                ],
+            ],
+            'ubicaciones' => [
+                'table' => 'ubicaciones',
+                'label' => 'Ubicaciones',
+                'singular' => 'Ubicacion',
+                'description' => 'Ubicaciones de amarre (Agua) y sector tierra.',
+                'fields' => [
+                    'ambito' => ['label' => 'Ambito', 'type' => 'choice', 'required' => true, 'default' => 'agua', 'list' => true, 'choices' => [
+                        'agua' => 'Agua',
+                        'tierra' => 'Tierra',
+                    ]],
+                    'nombre' => ['label' => 'Nombre', 'type' => 'text', 'required' => true, 'list' => true],
+                    'activo' => ['label' => 'Activo', 'type' => 'boolean', 'default' => true, 'list' => true],
                 ],
             ],
             'vehiculos' => [
@@ -250,8 +287,8 @@ final class ResourceRegistry
             ],
             'mediciones-nivel' => [
                 'table' => 'mediciones_nivel',
-                'label' => 'Mediciones de nivel',
-                'singular' => 'Medicion de nivel',
+                'label' => 'Nivel del lago',
+                'singular' => 'Nivel del lago',
                 'description' => 'Lecturas del sensor ESP8266 (distancia, profundidad y msnm).',
                 'fields' => [
                     'fecha' => ['label' => 'Fecha', 'type' => 'datetime', 'list' => true],
@@ -425,7 +462,11 @@ final class ResourceRegistry
                 continue;
             }
 
-            $payload[$column] = $this->coerceValue($source[$column], $field);
+            $value = $this->coerceValue($source[$column], $field);
+            if (($value === null || $value === '') && array_key_exists('default', $field)) {
+                $value = $field['default'];
+            }
+            $payload[$column] = $value;
         }
 
         return $payload;
@@ -443,17 +484,88 @@ final class ResourceRegistry
 
         $relation = $field['relation'];
         $key = $relation['key'] ?? 'id';
+        $where = !empty($relation['active_only']) ? ' WHERE activo = TRUE' : '';
         $sql = sprintf(
-            'SELECT %s AS id, %s AS label FROM %s ORDER BY label ASC LIMIT 500',
+            'SELECT %s AS id, %s AS label FROM %s%s ORDER BY label ASC LIMIT 500',
             $key,
             $relation['label'],
-            $relation['table']
+            $relation['table'],
+            $where
         );
 
         return array_map(
             static fn (array $row): array => ['id' => $row['id'], 'label' => (string) $row['label']],
             $connection->fetchAllAssociative($sql)
         );
+    }
+
+    /**
+     * Agrega {columna}_label para campos relation del listado admin.
+     *
+     * @param array<string, mixed> $definition
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    public function withRelationLabels(Connection $connection, array $definition, array $rows): array
+    {
+        if ($rows === []) {
+            return $rows;
+        }
+
+        foreach ($this->listFields($definition) as $column => $field) {
+            if (($field['type'] ?? null) !== 'relation') {
+                continue;
+            }
+
+            // En listado mostrar tambien inactivos si ya estan referenciados.
+            $fieldForMap = $field;
+            unset($fieldForMap['relation']['active_only']);
+            $map = [];
+            foreach ($this->relationOptions($connection, $fieldForMap) as $option) {
+                $map[(string) $option['id']] = $option['label'];
+            }
+
+            foreach ($rows as &$row) {
+                $raw = $row[$column] ?? null;
+                $row[$column.'_label'] = $raw === null || $raw === ''
+                    ? ''
+                    : ($map[(string) $raw] ?? ('#'.$raw));
+            }
+            unset($row);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Listado API de embarcaciones con labels de ubicacion y estado padron.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function fetchEmbarcacionesApi(Connection $connection, ?int $numeroSocio = null, ?string $ambito = null, int $limit = 500): array
+    {
+        $sql = "SELECT e.*,
+                       u.nombre AS ubicacion,
+                       u.ambito AS ubicacion_ambito,
+                       ep.nombre AS estado_padron
+                FROM cnb_app.embarcaciones e
+                LEFT JOIN cnb_app.ubicaciones u ON u.id = e.ubicacion_id
+                LEFT JOIN cnb_app.estados_padron ep ON ep.id = e.estado_padron_id
+                WHERE 1=1";
+        $params = [];
+
+        if ($numeroSocio !== null) {
+            $sql .= ' AND e.numero_socio = ?';
+            $params[] = $numeroSocio;
+        }
+        if ($ambito !== null && $ambito !== '') {
+            $sql .= ' AND e.ambito = ?';
+            $params[] = $ambito;
+        }
+
+        $sql .= ' ORDER BY e.id DESC LIMIT '.$limit;
+
+        return array_map($this->normalizeRow(...), $connection->fetchAllAssociative($sql, $params));
     }
 
     /**

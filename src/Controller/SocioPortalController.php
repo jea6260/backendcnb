@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Service\ResourceRegistry;
+use App\Service\VaraderoService;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception as DbalException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -17,6 +18,7 @@ final class SocioPortalController extends AbstractController
     public function __construct(
         private readonly Connection $connection,
         private readonly ResourceRegistry $registry,
+        private readonly VaraderoService $varadero,
     ) {
     }
 
@@ -339,14 +341,9 @@ final class SocioPortalController extends AbstractController
             return $socio;
         }
 
-        $rows = $this->connection->fetchAllAssociative(
-            "SELECT * FROM cnb_app.embarcaciones
-             WHERE numero_socio = ? AND estado = 'activa'
-             ORDER BY nombre ASC",
-            [$socio['numero_socio']]
-        );
-
-        return $this->json(['data' => array_map($this->registry->normalizeRow(...), $rows)]);
+        return $this->json([
+            'data' => $this->varadero->embarcacionesDeSocio((int) $socio['numero_socio']),
+        ]);
     }
 
     #[Route('/espacios-varadero', name: 'api_socio_espacios_varadero', methods: ['GET'])]
@@ -451,12 +448,33 @@ final class SocioPortalController extends AbstractController
             return $socio;
         }
 
-        $rows = $this->connection->fetchAllAssociative(
-            'SELECT * FROM cnb_app.reservas_varadero WHERE numero_socio = ? ORDER BY fecha_inicio DESC',
-            [$socio['numero_socio']]
-        );
+        $reservas = $this->varadero->reservasDeSocio((int) $socio['numero_socio']);
+        $activa = $this->varadero->reservaBloqueanteDeSocio((int) $socio['numero_socio']);
 
-        return $this->json(['data' => array_map($this->registry->normalizeRow(...), $rows)]);
+        return $this->json([
+            'data' => $reservas,
+            'reserva_activa' => $activa,
+            'puede_crear' => $activa === null,
+        ]);
+    }
+
+    #[Route('/reservas-varadero/{id}/observaciones', name: 'api_socio_reservas_observaciones', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function agregarObservacionReserva(int $id, Request $request): JsonResponse
+    {
+        $socio = $this->authenticate($request);
+        if ($socio instanceof JsonResponse) {
+            return $socio;
+        }
+
+        $data = $this->jsonBody($request);
+        $texto = trim((string) ($data['observaciones'] ?? $data['texto'] ?? ''));
+        $resultado = $this->varadero->agregarObservacion($id, (int) $socio['numero_socio'], $texto);
+
+        if (!$resultado['ok']) {
+            return $this->json(['error' => $resultado['error']], $resultado['status']);
+        }
+
+        return $this->json(['data' => $resultado['data']]);
     }
 
     #[Route('/reservas-varadero', name: 'api_socio_reservas_create', methods: ['POST'])]
@@ -468,97 +486,28 @@ final class SocioPortalController extends AbstractController
         }
 
         $data = $this->jsonBody($request);
-        $required = ['embarcacion_id', 'espacio_id', 'fecha_inicio', 'fecha_fin'];
-        foreach ($required as $field) {
-            if (!isset($data[$field]) || $data[$field] === '') {
-                return $this->json(['error' => $field . ' es obligatorio'], Response::HTTP_BAD_REQUEST);
-            }
+        $data['numero_socio'] = $socio['numero_socio'];
+        $resultado = $this->varadero->validarYPrepararReserva($data);
+
+        if (!$resultado['ok']) {
+            return $this->json(['error' => $resultado['error']], $resultado['status']);
         }
 
-        $embarcacionId = (int) $data['embarcacion_id'];
-        $espacioId = (int) $data['espacio_id'];
-        $fechaInicio = (string) $data['fecha_inicio'];
-        $fechaFin = (string) $data['fecha_fin'];
-
         try {
-            $embarcacion = $this->connection->fetchAssociative(
-                'SELECT id, numero_socio, nombre, eslora_m, estado
-                 FROM cnb_app.embarcaciones
-                 WHERE id = ?',
-                [$embarcacionId]
-            );
-
-            if (!$embarcacion) {
-                return $this->json(['error' => 'Embarcacion no encontrada'], Response::HTTP_NOT_FOUND);
-            }
-
-            if ((int) ($embarcacion['numero_socio'] ?? 0) !== (int) $socio['numero_socio']) {
-                return $this->json(
-                    ['error' => 'La embarcacion no pertenece al socio autenticado'],
-                    Response::HTTP_FORBIDDEN
-                );
-            }
-
-            if (($embarcacion['estado'] ?? '') !== 'activa') {
-                return $this->json(
-                    ['error' => 'La embarcacion no esta activa para reservar varadero'],
-                    Response::HTTP_BAD_REQUEST
-                );
-            }
-
-            $espacio = $this->connection->fetchAssociative(
-                'SELECT id, eslora_max_m, activo FROM cnb_app.espacios_varadero WHERE id = ?',
-                [$espacioId]
-            );
-
-            if (!$espacio || !$this->isTruthy($espacio['activo'] ?? false)) {
-                return $this->json(['error' => 'Espacio de varadero no disponible'], Response::HTTP_BAD_REQUEST);
-            }
-
-            $inicio = new \DateTimeImmutable($fechaInicio);
-            $fin = new \DateTimeImmutable($fechaFin);
-            if ($fin < $inicio) {
-                return $this->json(['error' => 'fecha_fin debe ser posterior o igual a fecha_inicio'], Response::HTTP_BAD_REQUEST);
-            }
-
-            $dias = (int) $inicio->diff($fin)->days + 1;
-            if ($dias > 15) {
-                return $this->json(['error' => 'La reserva no puede superar 15 dias'], Response::HTTP_BAD_REQUEST);
-            }
-
-            $solape = $this->connection->fetchOne(
-                "SELECT id FROM cnb_app.reservas_varadero
-                 WHERE espacio_id = ?
-                   AND estado IN ('pendiente', 'confirmada', 'en_curso')
-                   AND fecha_inicio <= ?
-                   AND fecha_fin >= ?
-                 LIMIT 1",
-                [$espacioId, $fechaFin, $fechaInicio]
-            );
-
-            if ($solape) {
-                return $this->json(
-                    ['error' => 'El espacio de varadero no esta disponible en ese rango'],
-                    Response::HTTP_CONFLICT
-                );
-            }
-
-            $payload = [
-                'numero_socio' => $socio['numero_socio'],
-                'embarcacion_id' => $embarcacionId,
-                'espacio_id' => $espacioId,
-                'fecha_inicio' => $fechaInicio,
-                'fecha_fin' => $fechaFin,
-                'motivo' => $data['motivo'] ?? 'limpieza_mantenimiento',
-                'observaciones' => $data['observaciones'] ?? null,
-                'estado' => 'pendiente',
-            ];
-
             $sql = 'INSERT INTO cnb_app.reservas_varadero (numero_socio, embarcacion_id, espacio_id, fecha_inicio, fecha_fin, motivo, observaciones, estado)
-                    VALUES (:numero_socio, :embarcacion_id, :espacio_id, :fecha_inicio, :fecha_fin, :motivo, :observaciones, :estado) RETURNING *';
-            $row = $this->connection->fetchAssociative($sql, $payload) ?: [];
+                    VALUES (:numero_socio, :embarcacion_id, :espacio_id, :fecha_inicio, :fecha_fin, :motivo, :observaciones, :estado)
+                    RETURNING id';
+            $id = (int) ($this->connection->fetchOne($sql, $resultado['payload']) ?: 0);
+            $reservas = $this->varadero->reservasDeSocio((int) $socio['numero_socio']);
+            $creada = null;
+            foreach ($reservas as $reserva) {
+                if ((int) ($reserva['id'] ?? 0) === $id) {
+                    $creada = $reserva;
+                    break;
+                }
+            }
 
-            return $this->json(['data' => $this->registry->normalizeRow($row)], Response::HTTP_CREATED);
+            return $this->json(['data' => $creada ?? ['id' => $id]], Response::HTTP_CREATED);
         } catch (DbalException $exception) {
             return $this->dbalError($exception);
         } catch (\Exception $exception) {

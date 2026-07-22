@@ -173,8 +173,11 @@
         <div class="col-12 col-xl-4">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <h2 class="h5 mb-3">Nueva reserva</h2>
+                    <h2 class="h5 mb-3" id="form-title">Nueva reserva</h2>
                     <form method="post" id="varadero-form" class="row g-3">
+                        <input type="hidden" name="_accion" id="form-accion" value="{{ reserva_activa ? 'observacion' : 'crear' }}">
+                        <input type="hidden" name="reserva_id" id="reserva_id" value="{{ reserva_activa.id|default('') }}">
+
                         <div class="col-12">
                             <label class="form-label" for="numero_socio">Socio</label>
                             <select class="form-select" id="numero_socio" name="numero_socio" required>
@@ -185,71 +188,97 @@
                             </select>
                         </div>
 
-                        <div class="col-12">
-                            <label class="form-label" for="embarcacion_id">Embarcacion del socio</label>
-                            <select class="form-select" id="embarcacion_id" name="embarcacion_id" required>
-                                <option value="">Seleccionar embarcacion</option>
-                                {% for barco in embarcaciones %}
-                                    <option value="{{ barco.id }}" data-eslora="{{ barco.eslora_m }}" {% if data.embarcacion_id == barco.id %}selected{% endif %}>{{ barco.label }}</option>
-                                {% endfor %}
-                            </select>
-                            <div class="form-text">Solo se listan embarcaciones activas del socio.</div>
+                        <div class="col-12" id="active-reserva-panel" style="{{ reserva_activa ? '' : 'display:none' }}">
+                            <div class="alert alert-warning mb-0">
+                                <div class="fw-semibold mb-1">Reserva activa: no puede cargar otra</div>
+                                <div class="small" id="active-reserva-summary">
+                                    {% if reserva_activa %}
+                                        #{{ reserva_activa.id }} · {{ reserva_activa.estado }}
+                                        · {{ reserva_activa.embarcacion|default('Sin embarcacion') }}
+                                        · espacio {{ reserva_activa.espacio_codigo|default(reserva_activa.espacio_id) }}
+                                        · {{ reserva_activa.fecha_inicio }} → {{ reserva_activa.fecha_fin }}
+                                    {% endif %}
+                                </div>
+                                <pre class="small mb-0 mt-2 text-wrap" id="active-reserva-obs" style="white-space:pre-wrap;{% if not reserva_activa or not reserva_activa.observaciones %}display:none{% endif %}">{% if reserva_activa %}{{ reserva_activa.observaciones }}{% endif %}</pre>
+                            </div>
                         </div>
 
-                        <div class="col-12">
-                            <label class="form-label" for="espacio_id">Espacio</label>
-                            <select class="form-select" id="espacio_id" name="espacio_id" required>
-                                <option value="">Seleccionar espacio</option>
-                                {% for espacio in espacios %}
-                                    <option value="{{ espacio.id }}" data-eslora-max="{{ espacio.eslora_max_m }}" {% if data.espacio_id == espacio.id %}selected{% endif %}>{{ espacio.label }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
+                        <div id="create-fields" class="col-12" style="{{ reserva_activa ? 'display:none' : '' }}">
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label class="form-label" for="embarcacion_id">Embarcacion del socio</label>
+                                    <select class="form-select" id="embarcacion_id" name="embarcacion_id" {% if not reserva_activa %}required{% endif %}>
+                                        <option value="">Seleccionar embarcacion</option>
+                                        {% for barco in embarcaciones %}
+                                            <option value="{{ barco.id }}" data-eslora="{{ barco.eslora_m }}" {% if data.embarcacion_id == barco.id %}selected{% endif %}>{{ barco.label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="form-text" id="embarcaciones-help">Solo se listan embarcaciones activas del socio.</div>
+                                </div>
 
-                        <div class="col-12">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <label class="form-label mb-0">Desde / Hasta</label>
-                                <div class="btn-group btn-group-sm">
-                                    <button type="button" class="btn btn-outline-secondary" id="cal-prev">&larr;</button>
-                                    <button type="button" class="btn btn-outline-secondary" id="cal-month-label" disabled>Mes</button>
-                                    <button type="button" class="btn btn-outline-secondary" id="cal-next">&rarr;</button>
+                                <div class="col-12">
+                                    <label class="form-label" for="espacio_id">Espacio</label>
+                                    <select class="form-select" id="espacio_id" name="espacio_id" {% if not reserva_activa %}required{% endif %}>
+                                        <option value="">Seleccionar espacio</option>
+                                        {% for espacio in espacios %}
+                                            <option value="{{ espacio.id }}" data-eslora-max="{{ espacio.eslora_max_m }}" {% if data.espacio_id == espacio.id %}selected{% endif %}>{{ espacio.label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <div class="col-12">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <label class="form-label mb-0">Desde / Hasta</label>
+                                        <div class="btn-group btn-group-sm">
+                                            <button type="button" class="btn btn-outline-secondary" id="cal-prev">&larr;</button>
+                                            <button type="button" class="btn btn-outline-secondary" id="cal-month-label" disabled>Mes</button>
+                                            <button type="button" class="btn btn-outline-secondary" id="cal-next">&rarr;</button>
+                                        </div>
+                                    </div>
+                                    <div class="var-calendar" id="var-calendar"></div>
+                                    <input type="hidden" name="fecha_inicio" id="fecha_inicio" value="{{ data.fecha_inicio }}">
+                                    <input type="hidden" name="fecha_fin" id="fecha_fin" value="{{ data.fecha_fin }}">
+                                    <div class="mt-2 small text-muted" id="range-summary">Seleccioná el día de inicio y luego el de fin en el calendario.</div>
+                                    <div class="var-status small mt-1" id="availability-status"></div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label" for="estado">Estado</label>
+                                    <select class="form-select" id="estado" name="estado">
+                                        {% for value, label in {
+                                            pendiente: 'Pendiente',
+                                            confirmada: 'Confirmada',
+                                            en_curso: 'En curso'
+                                        } %}
+                                            <option value="{{ value }}" {% if data.estado == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label" for="motivo">Motivo</label>
+                                    <input class="form-control" id="motivo" name="motivo" value="{{ data.motivo }}">
                                 </div>
                             </div>
-                            <div class="var-calendar" id="var-calendar"></div>
-                            <input type="hidden" name="fecha_inicio" id="fecha_inicio" value="{{ data.fecha_inicio }}" required>
-                            <input type="hidden" name="fecha_fin" id="fecha_fin" value="{{ data.fecha_fin }}" required>
-                            <div class="mt-2 small text-muted" id="range-summary">Seleccioná el día de inicio y luego el de fin en el calendario.</div>
-                            <div class="var-status small mt-1" id="availability-status"></div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label" for="estado">Estado</label>
-                            <select class="form-select" id="estado" name="estado">
-                                {% for value, label in {
-                                    pendiente: 'Pendiente',
-                                    confirmada: 'Confirmada',
-                                    en_curso: 'En curso'
-                                } %}
-                                    <option value="{{ value }}" {% if data.estado == value %}selected{% endif %}>{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label" for="motivo">Motivo</label>
-                            <input class="form-control" id="motivo" name="motivo" value="{{ data.motivo }}" required>
                         </div>
 
                         <div class="col-12">
-                            <label class="form-label" for="observaciones">Observaciones</label>
-                            <textarea class="form-control" id="observaciones" name="observaciones" rows="2">{{ data.observaciones }}</textarea>
+                            <label class="form-label" for="observaciones" id="observaciones-label">
+                                {{ reserva_activa ? 'Nueva observacion (ej. solicitar extender dias)' : 'Observaciones' }}
+                            </label>
+                            <textarea class="form-control" id="observaciones" name="observaciones" rows="3" {% if reserva_activa %}required{% endif %} placeholder="{{ reserva_activa ? 'Ej: Solicito extender la reserva 3 dias mas' : '' }}">{% if not reserva_activa %}{{ data.observaciones }}{% endif %}</textarea>
                         </div>
 
                         <div class="col-12">
-                            <button class="btn btn-primary" type="submit" id="btn-guardar">Crear reserva</button>
+                            <button class="btn btn-primary" type="submit" id="btn-guardar">
+                                {{ reserva_activa ? 'Agregar observacion' : 'Crear reserva' }}
+                            </button>
                         </div>
                     </form>
                 </div>
+            </div>
+        </div>
+
             </div>
         </div>
 
@@ -346,14 +375,70 @@ document.addEventListener('DOMContentLoaded', () => {
         availabilityStatus.className = 'var-status small mt-1 ' + (text ? (ok ? 'text-success' : 'text-danger') : '');
     }
 
+    function setReservaActivaMode(reserva) {
+        const panel = document.getElementById('active-reserva-panel');
+        const createFields = document.getElementById('create-fields');
+        const formAccion = document.getElementById('form-accion');
+        const reservaId = document.getElementById('reserva_id');
+        const formTitle = document.getElementById('form-title');
+        const obsLabel = document.getElementById('observaciones-label');
+        const obs = document.getElementById('observaciones');
+        const btn = document.getElementById('btn-guardar');
+        const help = document.getElementById('embarcaciones-help');
+        const summary = document.getElementById('active-reserva-summary');
+        const obsPrev = document.getElementById('active-reserva-obs');
+
+        if (reserva) {
+            panel.style.display = '';
+            createFields.style.display = 'none';
+            formAccion.value = 'observacion';
+            reservaId.value = reserva.id;
+            formTitle.textContent = 'Reserva activa';
+            obsLabel.textContent = 'Nueva observacion (ej. solicitar extender dias)';
+            obs.required = true;
+            obs.placeholder = 'Ej: Solicito extender la reserva 3 dias mas';
+            obs.value = '';
+            btn.textContent = 'Agregar observacion';
+            barcoSelect.required = false;
+            espacioSelect.required = false;
+            summary.textContent = `#${reserva.id} · ${reserva.estado} · ${reserva.embarcacion || 'Sin embarcacion'} · espacio ${reserva.espacio_codigo || reserva.espacio_id} · ${reserva.fecha_inicio} → ${reserva.fecha_fin}`;
+            if (reserva.observaciones) {
+                obsPrev.style.display = '';
+                obsPrev.textContent = reserva.observaciones;
+            } else {
+                obsPrev.style.display = 'none';
+                obsPrev.textContent = '';
+            }
+        } else {
+            panel.style.display = 'none';
+            createFields.style.display = '';
+            formAccion.value = 'crear';
+            reservaId.value = '';
+            formTitle.textContent = 'Nueva reserva';
+            obsLabel.textContent = 'Observaciones';
+            obs.required = false;
+            obs.placeholder = '';
+            btn.textContent = 'Crear reserva';
+            barcoSelect.required = true;
+            espacioSelect.required = true;
+            if (help) help.textContent = 'Solo se listan embarcaciones activas del socio.';
+        }
+    }
+
     async function loadEmbarcaciones() {
         const numero = socioSelect.value;
         const previous = barcoSelect.value;
         barcoSelect.innerHTML = '<option value="">Seleccionar embarcacion</option>';
-        if (!numero) return;
+        if (!numero) {
+            setReservaActivaMode(null);
+            const help = document.getElementById('embarcaciones-help');
+            if (help) help.textContent = 'Solo se listan embarcaciones activas del socio.';
+            return;
+        }
         const res = await fetch(`${urls.embarcaciones}?numero_socio=${encodeURIComponent(numero)}`);
         const json = await res.json();
-        (json.data || []).forEach(item => {
+        const items = json.data || [];
+        items.forEach(item => {
             const opt = document.createElement('option');
             opt.value = item.id;
             opt.textContent = item.label;
@@ -361,6 +446,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (String(item.id) === String(previous)) opt.selected = true;
             barcoSelect.appendChild(opt);
         });
+        const help = document.getElementById('embarcaciones-help');
+        if (help) {
+            help.textContent = items.length
+                ? `${items.length} embarcacion(es) del socio.`
+                : 'Este socio no tiene embarcaciones activas vinculadas (numero_socio).';
+        }
+        setReservaActivaMode(json.reserva_activa || null);
         await refreshAvailability();
     }
 
@@ -612,6 +704,9 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshAvailability();
     } else {
         setAvailabilityMessage('Elegí un espacio para ver ocupación en el calendario.', true);
+    }
+    if (socioSelect.value) {
+        loadEmbarcaciones();
     }
 });
 </script>

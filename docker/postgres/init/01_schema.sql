@@ -30,19 +30,49 @@ CREATE TABLE marineros (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE ubicaciones (
+    id BIGSERIAL PRIMARY KEY,
+    ambito VARCHAR(20) NOT NULL
+        CHECK (ambito IN ('agua', 'tierra')),
+    nombre VARCHAR(120) NOT NULL,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (ambito, nombre)
+);
+
+CREATE TABLE estados_padron (
+    id BIGSERIAL PRIMARY KEY,
+    nombre VARCHAR(60) NOT NULL UNIQUE,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE embarcaciones (
     id BIGSERIAL PRIMARY KEY,
+    ambito VARCHAR(20) NOT NULL DEFAULT 'agua'
+        CHECK (ambito IN ('agua', 'tierra')),
     numero_socio INTEGER REFERENCES socios(numero_socio) ON DELETE SET NULL,
-    nombre VARCHAR(160) NOT NULL,
-    matricula VARCHAR(80) UNIQUE,
     tipo VARCHAR(80) NOT NULL DEFAULT 'velero',
-    eslora_m NUMERIC(5,2) NOT NULL CHECK (eslora_m > 0),
-    manga_m NUMERIC(5,2),
-    calado_m NUMERIC(5,2),
-    es_cnb BOOLEAN NOT NULL DEFAULT FALSE,
+    modelo VARCHAR(120),
+    nombre VARCHAR(160) NOT NULL,
+    matricula VARCHAR(80),
+    eslora_m NUMERIC(5,2) CHECK (eslora_m IS NULL OR eslora_m > 0),
+    manga_m NUMERIC(5,2) CHECK (manga_m IS NULL OR manga_m > 0),
+    m2_matricula NUMERIC(10,3),
+    metros_comprados NUMERIC(10,2),
+    paga_expensas_m2 NUMERIC(10,2),
+    ubicacion_id BIGINT REFERENCES ubicaciones(id) ON DELETE SET NULL,
+    observaciones TEXT,
+    eslora_medida_m NUMERIC(5,2),
+    manga_medida_m NUMERIC(5,2),
+    m2_medidos NUMERIC(10,3),
     estado VARCHAR(20) NOT NULL DEFAULT 'activa'
         CHECK (estado IN ('activa', 'mantenimiento', 'inactiva')),
-    observaciones TEXT,
+    estado_padron_id BIGINT REFERENCES estados_padron(id) ON DELETE SET NULL,
+    es_cnb BOOLEAN NOT NULL DEFAULT FALSE,
+    calado_m NUMERIC(5,2),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -138,6 +168,12 @@ CREATE TABLE avances_tarea (
 );
 
 CREATE INDEX idx_embarcaciones_numero_socio ON embarcaciones(numero_socio);
+CREATE INDEX idx_embarcaciones_ambito ON embarcaciones(ambito);
+CREATE INDEX idx_embarcaciones_ubicacion_id ON embarcaciones(ubicacion_id);
+CREATE INDEX idx_embarcaciones_estado_padron_id ON embarcaciones(estado_padron_id);
+CREATE INDEX idx_ubicaciones_ambito ON ubicaciones(ambito);
+CREATE UNIQUE INDEX embarcaciones_matricula_unique ON embarcaciones (matricula)
+    WHERE matricula IS NOT NULL AND btrim(matricula) <> '';
 CREATE INDEX idx_reservas_varadero_fechas ON reservas_varadero(fecha_inicio, fecha_fin);
 CREATE INDEX idx_reservas_varadero_numero_socio ON reservas_varadero(numero_socio);
 CREATE INDEX idx_reservas_varadero_espacio ON reservas_varadero(espacio_id);
@@ -154,6 +190,12 @@ END;
 $$ LANGUAGE plpgsql SET search_path = cnb_app, public;
 
 CREATE TRIGGER trg_socios_updated_at BEFORE UPDATE ON socios
+FOR EACH ROW EXECUTE FUNCTION cnb_touch_updated_at();
+
+CREATE TRIGGER trg_ubicaciones_updated_at BEFORE UPDATE ON ubicaciones
+FOR EACH ROW EXECUTE FUNCTION cnb_touch_updated_at();
+
+CREATE TRIGGER trg_estados_padron_updated_at BEFORE UPDATE ON estados_padron
 FOR EACH ROW EXECUTE FUNCTION cnb_touch_updated_at();
 
 CREATE TRIGGER trg_marineros_updated_at BEFORE UPDATE ON marineros

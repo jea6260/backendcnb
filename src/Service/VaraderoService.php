@@ -9,6 +9,7 @@ final class VaraderoService
     public const DIAS_MAX_RESERVA = 15;
     public const DIAS_MAX_ANIO = 15;
     public const ESTADOS_ACTIVOS = ['pendiente', 'confirmada', 'en_curso'];
+    public const ESTADOS_BLOQUEAN_NUEVA = ['pendiente', 'en_curso'];
     public const ESTADOS_CUPO = ['pendiente', 'confirmada', 'en_curso', 'finalizada'];
 
     public function __construct(
@@ -18,40 +19,170 @@ final class VaraderoService
     }
 
     /**
-     * @return list<array{id: int|string, label: string, eslora_m: float|null, estado: string}>
+     * Embarcaciones del socio aptas para varadero (activas; trata estado vacio como activa).
+     *
+     * @return list<array{id: int|string, label: string, eslora_m: float|null, estado: string, nombre: string, matricula: string|null}>
      */
     public function embarcacionesDeSocio(int $numeroSocio, bool $soloActivas = true): array
     {
-        $sql = "SELECT id, nombre, matricula, eslora_m, estado
-                FROM cnb_app.embarcaciones
-                WHERE numero_socio = ?";
+        $sql = "SELECT e.id, e.nombre, e.matricula, e.eslora_m, e.estado, e.ambito, e.tipo, e.modelo,
+                       e.ubicacion_id, u.nombre AS ubicacion, e.estado_padron_id, ep.nombre AS estado_padron
+                FROM cnb_app.embarcaciones e
+                LEFT JOIN cnb_app.ubicaciones u ON u.id = e.ubicacion_id
+                LEFT JOIN cnb_app.estados_padron ep ON ep.id = e.estado_padron_id
+                WHERE e.numero_socio = ?";
         $params = [$numeroSocio];
 
         if ($soloActivas) {
-            $sql .= " AND estado = 'activa'";
+            // Estado vacio/null se considera activa (datos legacy / formularios incompletos).
+            $sql .= " AND COALESCE(NULLIF(TRIM(e.estado), ''), 'activa') = 'activa'";
         }
 
-        $sql .= ' ORDER BY nombre ASC';
+        $sql .= ' ORDER BY e.nombre ASC';
 
         $rows = $this->connection->fetchAllAssociative($sql, $params);
 
         return array_map(
             static function (array $row): array {
+                $estado = trim((string) ($row['estado'] ?? ''));
+                if ($estado === '') {
+                    $estado = 'activa';
+                }
                 $label = (string) $row['nombre'];
                 if (!empty($row['matricula'])) {
                     $label .= ' - ' . $row['matricula'];
                 }
-                $label .= sprintf(' (%.2fm)', (float) $row['eslora_m']);
+                if ($row['eslora_m'] !== null && $row['eslora_m'] !== '') {
+                    $label .= sprintf(' (%.2fm)', (float) $row['eslora_m']);
+                }
+                if (!empty($row['ambito'])) {
+                    $label .= ' [' . $row['ambito'] . ']';
+                }
 
                 return [
                     'id' => $row['id'],
+                    'nombre' => (string) $row['nombre'],
+                    'matricula' => $row['matricula'] !== null ? (string) $row['matricula'] : null,
                     'label' => $label,
-                    'eslora_m' => isset($row['eslora_m']) ? (float) $row['eslora_m'] : null,
-                    'estado' => (string) $row['estado'],
+                    'eslora_m' => isset($row['eslora_m']) && $row['eslora_m'] !== null && $row['eslora_m'] !== ''
+                        ? (float) $row['eslora_m']
+                        : null,
+                    'estado' => $estado,
+                    'ambito' => $row['ambito'] !== null ? (string) $row['ambito'] : null,
+                    'tipo' => $row['tipo'] !== null ? (string) $row['tipo'] : null,
+                    'modelo' => $row['modelo'] !== null ? (string) $row['modelo'] : null,
+                    'ubicacion_id' => isset($row['ubicacion_id']) ? (int) $row['ubicacion_id'] : null,
+                    'ubicacion' => $row['ubicacion'] !== null ? (string) $row['ubicacion'] : null,
+                    'estado_padron_id' => isset($row['estado_padron_id']) ? (int) $row['estado_padron_id'] : null,
+                    'estado_padron' => $row['estado_padron'] !== null ? (string) $row['estado_padron'] : null,
                 ];
             },
             $rows
         );
+    }
+
+    /**
+     * Reserva pendiente o en_curso del socio (bloquea una nueva).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function reservaBloqueanteDeSocio(int $numeroSocio): ?array
+    {
+        $row = $this->connection->fetchAssociative(
+            "SELECT r.*, e.nombre AS embarcacion_nombre, e.matricula AS embarcacion_matricula,
+                    e.eslora_m AS embarcacion_eslora_m,
+                    sp.codigo AS espacio_codigo
+             FROM cnb_app.reservas_varadero r
+             LEFT JOIN cnb_app.embarcaciones e ON e.id = r.embarcacion_id
+             LEFT JOIN cnb_app.espacios_varadero sp ON sp.id = r.espacio_id
+             WHERE r.numero_socio = ?
+               AND r.estado IN ('pendiente', 'en_curso')
+             ORDER BY
+               CASE r.estado WHEN 'en_curso' THEN 0 ELSE 1 END,
+               r.fecha_inicio DESC
+             LIMIT 1",
+            [$numeroSocio]
+        );
+
+        return $row ? $this->normalizeReserva($row) : null;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function reservasDeSocio(int $numeroSocio): array
+    {
+        $rows = $this->connection->fetchAllAssociative(
+            "SELECT r.*, e.nombre AS embarcacion_nombre, e.matricula AS embarcacion_matricula,
+                    sp.codigo AS espacio_codigo
+             FROM cnb_app.reservas_varadero r
+             LEFT JOIN cnb_app.embarcaciones e ON e.id = r.embarcacion_id
+             LEFT JOIN cnb_app.espacios_varadero sp ON sp.id = r.espacio_id
+             WHERE r.numero_socio = ?
+             ORDER BY r.fecha_inicio DESC",
+            [$numeroSocio]
+        );
+
+        return array_map($this->normalizeReserva(...), $rows);
+    }
+
+    /**
+     * @return array{ok: true, data: array<string, mixed>}|array{ok: false, error: string, status: int}
+     */
+    public function agregarObservacion(int $reservaId, int $numeroSocio, string $texto): array
+    {
+        $texto = trim($texto);
+        if ($texto === '') {
+            return ['ok' => false, 'error' => 'La observacion no puede estar vacia', 'status' => 400];
+        }
+
+        $reserva = $this->connection->fetchAssociative(
+            'SELECT id, numero_socio, estado, observaciones
+             FROM cnb_app.reservas_varadero
+             WHERE id = ?',
+            [$reservaId]
+        );
+
+        if (!$reserva) {
+            return ['ok' => false, 'error' => 'Reserva no encontrada', 'status' => 404];
+        }
+
+        if ((int) $reserva['numero_socio'] !== $numeroSocio) {
+            return ['ok' => false, 'error' => 'La reserva no pertenece al socio', 'status' => 403];
+        }
+
+        if (!in_array((string) $reserva['estado'], self::ESTADOS_BLOQUEAN_NUEVA, true)) {
+            return [
+                'ok' => false,
+                'error' => 'Solo se pueden agregar observaciones a reservas pendientes o en curso',
+                'status' => 400,
+            ];
+        }
+
+        $stamp = (new \DateTimeImmutable('now', new \DateTimeZone('America/Argentina/Buenos_Aires')))
+            ->format('Y-m-d H:i');
+        $previa = trim((string) ($reserva['observaciones'] ?? ''));
+        $nueva = $previa === ''
+            ? sprintf('[%s] %s', $stamp, $texto)
+            : $previa . "\n" . sprintf('[%s] %s', $stamp, $texto);
+
+        $this->connection->update(
+            'cnb_app.reservas_varadero',
+            ['observaciones' => $nueva],
+            ['id' => $reservaId]
+        );
+
+        $actualizada = $this->connection->fetchAssociative(
+            "SELECT r.*, e.nombre AS embarcacion_nombre, e.matricula AS embarcacion_matricula,
+                    sp.codigo AS espacio_codigo
+             FROM cnb_app.reservas_varadero r
+             LEFT JOIN cnb_app.embarcaciones e ON e.id = r.embarcacion_id
+             LEFT JOIN cnb_app.espacios_varadero sp ON sp.id = r.espacio_id
+             WHERE r.id = ?",
+            [$reservaId]
+        );
+
+        return ['ok' => true, 'data' => $this->normalizeReserva($actualizada ?: [])];
     }
 
     /**
@@ -67,9 +198,9 @@ final class VaraderoService
 
         $reservas = $this->connection->fetchAllAssociative(
             "SELECT r.id, r.espacio_id, r.numero_socio, r.embarcacion_id,
-                    r.fecha_inicio, r.fecha_fin, r.estado, r.motivo,
+                    r.fecha_inicio, r.fecha_fin, r.estado, r.motivo, r.observaciones,
                     s.apellido AS socio_apellido, s.nombre AS socio_nombre,
-                    e.nombre AS embarcacion_nombre
+                    e.nombre AS embarcacion_nombre, e.matricula AS embarcacion_matricula
              FROM cnb_app.reservas_varadero r
              LEFT JOIN cnb_app.socios s ON s.numero_socio = r.numero_socio
              LEFT JOIN cnb_app.embarcaciones e ON e.id = r.embarcacion_id
@@ -83,16 +214,24 @@ final class VaraderoService
         $byEspacio = [];
         foreach ($reservas as $reserva) {
             $espacioId = (int) $reserva['espacio_id'];
+            $embarcacion = trim((string) ($reserva['embarcacion_nombre'] ?? ''));
+            if ($embarcacion === '') {
+                $embarcacion = 'Embarcacion #' . $reserva['embarcacion_id'];
+            } elseif (!empty($reserva['embarcacion_matricula'])) {
+                $embarcacion .= ' - ' . $reserva['embarcacion_matricula'];
+            }
+
             $byEspacio[$espacioId][] = [
                 'id' => (int) $reserva['id'],
                 'fecha_inicio' => substr((string) $reserva['fecha_inicio'], 0, 10),
                 'fecha_fin' => substr((string) $reserva['fecha_fin'], 0, 10),
                 'estado' => $reserva['estado'],
                 'motivo' => $reserva['motivo'],
+                'observaciones' => $reserva['observaciones'],
                 'numero_socio' => (int) $reserva['numero_socio'],
                 'socio' => trim(($reserva['socio_apellido'] ?? '') . ', ' . ($reserva['socio_nombre'] ?? ''), ' ,'),
                 'embarcacion_id' => (int) $reserva['embarcacion_id'],
-                'embarcacion' => $reserva['embarcacion_nombre'] ?? ('#' . $reserva['embarcacion_id']),
+                'embarcacion' => $embarcacion,
             ];
         }
 
@@ -199,6 +338,19 @@ final class VaraderoService
             return ['ok' => false, 'error' => 'Socio, embarcacion, espacio y fechas son obligatorios', 'status' => 400];
         }
 
+        $bloqueante = $this->reservaBloqueanteDeSocio($numeroSocio);
+        if ($bloqueante !== null && ($excludeReservaId === null || (int) $bloqueante['id'] !== $excludeReservaId)) {
+            return [
+                'ok' => false,
+                'error' => sprintf(
+                    'El socio ya tiene una reserva %s (#%s). No puede cargar otra: agregue observaciones a la existente.',
+                    $bloqueante['estado'],
+                    $bloqueante['id']
+                ),
+                'status' => 409,
+            ];
+        }
+
         $embarcacion = $this->connection->fetchAssociative(
             'SELECT id, numero_socio, nombre, eslora_m, estado
              FROM cnb_app.embarcaciones
@@ -218,7 +370,7 @@ final class VaraderoService
             ];
         }
 
-        if (($embarcacion['estado'] ?? '') !== 'activa') {
+        if (!$this->isEmbarcacionActiva($embarcacion['estado'] ?? null)) {
             return [
                 'ok' => false,
                 'error' => 'La embarcacion no esta activa para reservar varadero',
@@ -251,6 +403,14 @@ final class VaraderoService
             return [
                 'ok' => false,
                 'error' => sprintf('La reserva no puede superar %d dias', self::DIAS_MAX_RESERVA),
+                'status' => 400,
+            ];
+        }
+
+        if ($embarcacion['eslora_m'] === null || $embarcacion['eslora_m'] === '') {
+            return [
+                'ok' => false,
+                'error' => 'La embarcacion no tiene eslora cargada; complete el padron antes de reservar varadero',
                 'status' => 400,
             ];
         }
@@ -317,6 +477,39 @@ final class VaraderoService
                 'observaciones' => ($data['observaciones'] ?? '') !== '' ? $data['observaciones'] : null,
             ],
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function normalizeReserva(array $row): array
+    {
+        $normalized = $this->registry->normalizeRow($row);
+        if (isset($normalized['fecha_inicio'])) {
+            $normalized['fecha_inicio'] = substr((string) $normalized['fecha_inicio'], 0, 10);
+        }
+        if (isset($normalized['fecha_fin'])) {
+            $normalized['fecha_fin'] = substr((string) $normalized['fecha_fin'], 0, 10);
+        }
+
+        $nombre = trim((string) ($normalized['embarcacion_nombre'] ?? ''));
+        if ($nombre === '' && isset($normalized['embarcacion_id'])) {
+            $nombre = 'Embarcacion #' . $normalized['embarcacion_id'];
+        }
+        $normalized['embarcacion'] = $nombre;
+        if (!empty($normalized['embarcacion_matricula'])) {
+            $normalized['embarcacion'] .= ' - ' . $normalized['embarcacion_matricula'];
+        }
+
+        return $normalized;
+    }
+
+    private function isEmbarcacionActiva(mixed $estado): bool
+    {
+        $normalized = strtolower(trim((string) ($estado ?? '')));
+
+        return $normalized === '' || $normalized === 'activa';
     }
 
     private function isTruthy(mixed $value): bool

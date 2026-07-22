@@ -62,21 +62,45 @@ final class AdminController extends AbstractController
 
         if ($request->isMethod('POST')) {
             $data = array_merge($data, $request->request->all());
-            $resultado = $this->varadero->validarYPrepararReserva($data);
+            $accion = (string) ($data['_accion'] ?? 'crear');
 
-            if (!$resultado['ok']) {
-                $error = $resultado['error'];
-            } else {
-                try {
-                    $this->connection->insert('cnb_app.reservas_varadero', $resultado['payload']);
-                    $this->addFlash('success', 'Reserva de varadero creada correctamente.');
+            if ($accion === 'observacion') {
+                $reservaId = (int) ($data['reserva_id'] ?? 0);
+                $numeroSocio = (int) ($data['numero_socio'] ?? 0);
+                $texto = trim((string) ($data['observaciones'] ?? ''));
+                $resultado = $this->varadero->agregarObservacion($reservaId, $numeroSocio, $texto);
+                if (!$resultado['ok']) {
+                    $error = $resultado['error'];
+                } else {
+                    $this->addFlash('success', 'Observacion agregada a la reserva.');
 
                     return $this->redirectToRoute('admin_varadero', [
-                        'desde' => $resultado['payload']['fecha_inicio'],
+                        'numero_socio' => $numeroSocio,
                     ]);
-                } catch (DbalException $exception) {
-                    $error = $exception->getPrevious()?->getMessage() ?? $exception->getMessage();
                 }
+            } else {
+                $resultado = $this->varadero->validarYPrepararReserva($data);
+
+                if (!$resultado['ok']) {
+                    $error = $resultado['error'];
+                } else {
+                    try {
+                        $this->connection->insert('cnb_app.reservas_varadero', $resultado['payload']);
+                        $this->addFlash('success', 'Reserva de varadero creada correctamente.');
+
+                        return $this->redirectToRoute('admin_varadero', [
+                            'desde' => $resultado['payload']['fecha_inicio'],
+                            'numero_socio' => $resultado['payload']['numero_socio'],
+                        ]);
+                    } catch (DbalException $exception) {
+                        $error = $exception->getPrevious()?->getMessage() ?? $exception->getMessage();
+                    }
+                }
+            }
+        } else {
+            $querySocio = (int) $request->query->get('numero_socio', 0);
+            if ($querySocio > 0) {
+                $data['numero_socio'] = (string) $querySocio;
             }
         }
 
@@ -105,9 +129,11 @@ final class AdminController extends AbstractController
         );
 
         $embarcaciones = [];
+        $reservaActiva = null;
         $numeroSocio = (int) ($data['numero_socio'] ?? 0);
         if ($numeroSocio > 0) {
             $embarcaciones = $this->varadero->embarcacionesDeSocio($numeroSocio);
+            $reservaActiva = $this->varadero->reservaBloqueanteDeSocio($numeroSocio);
         }
 
         return $this->render('admin/varadero.html.twig', [
@@ -116,6 +142,7 @@ final class AdminController extends AbstractController
             'socios' => $socios,
             'espacios' => $espacios,
             'embarcaciones' => $embarcaciones,
+            'reserva_activa' => $reservaActiva,
             'timeline_desde' => $desde,
             'timeline_hasta' => $hasta,
             'timeline' => $this->varadero->timeline($desde, $hasta),
@@ -175,7 +202,14 @@ final class AdminController extends AbstractController
             return $this->json(['error' => 'numero_socio es obligatorio'], Response::HTTP_BAD_REQUEST);
         }
 
-        return $this->json(['data' => $this->varadero->embarcacionesDeSocio($numeroSocio)]);
+        $embarcaciones = $this->varadero->embarcacionesDeSocio($numeroSocio);
+        $reservaActiva = $this->varadero->reservaBloqueanteDeSocio($numeroSocio);
+
+        return $this->json([
+            'data' => $embarcaciones,
+            'reserva_activa' => $reservaActiva,
+            'puede_crear' => $reservaActiva === null,
+        ]);
     }
 
     #[Route('/admin/{resource}', name: 'admin_resource_index', methods: ['GET'])]
@@ -192,7 +226,11 @@ final class AdminController extends AbstractController
         );
         $filters = array_filter($filters, static fn (string $value): bool => $value !== '');
 
-        $rows = $this->registry->fetchListRows($this->connection, $definition, $sort, $dir, $filters);
+        $rows = $this->registry->withRelationLabels(
+            $this->connection,
+            $definition,
+            $this->registry->fetchListRows($this->connection, $definition, $sort, $dir, $filters)
+        );
 
         return $this->render('admin/index.html.twig', [
             'resource' => $resource,

@@ -25,12 +25,14 @@ final class VaraderoService
      */
     public function embarcacionesDeSocio(int $numeroSocio, bool $soloActivas = true): array
     {
-        $sql = "SELECT e.id, e.nombre, e.matricula, e.eslora_m, e.estado, e.ambito, e.tipo, e.modelo,
-                       e.ubicacion_id, u.nombre AS ubicacion, e.estado_padron_id, ep.nombre AS estado_padron
+        $sql = "SELECT DISTINCT e.id, e.nombre, e.matricula, e.eslora_m, e.estado, e.ambito, e.tipo, e.modelo,
+                       e.ubicacion_id, u.nombre AS ubicacion, e.estado_padron_id, ep.nombre AS estado_padron,
+                       se.rol AS vinculo_rol
                 FROM cnb_app.embarcaciones e
+                INNER JOIN cnb_app.socio_embarcacion se ON se.embarcacion_id = e.id
                 LEFT JOIN cnb_app.ubicaciones u ON u.id = e.ubicacion_id
                 LEFT JOIN cnb_app.estados_padron ep ON ep.id = e.estado_padron_id
-                WHERE e.numero_socio = ?";
+                WHERE se.numero_socio = ?";
         $params = [$numeroSocio];
 
         if ($soloActivas) {
@@ -41,6 +43,23 @@ final class VaraderoService
         $sql .= ' ORDER BY e.nombre ASC';
 
         $rows = $this->connection->fetchAllAssociative($sql, $params);
+
+        // Fallback legacy: si la tabla M2M no tiene filas aun, usar embarcaciones.numero_socio
+        if ($rows === []) {
+            $legacySql = "SELECT e.id, e.nombre, e.matricula, e.eslora_m, e.estado, e.ambito, e.tipo, e.modelo,
+                                 e.ubicacion_id, u.nombre AS ubicacion, e.estado_padron_id, ep.nombre AS estado_padron,
+                                 'titular' AS vinculo_rol
+                          FROM cnb_app.embarcaciones e
+                          LEFT JOIN cnb_app.ubicaciones u ON u.id = e.ubicacion_id
+                          LEFT JOIN cnb_app.estados_padron ep ON ep.id = e.estado_padron_id
+                          WHERE e.numero_socio = ?";
+            $legacyParams = [$numeroSocio];
+            if ($soloActivas) {
+                $legacySql .= " AND COALESCE(NULLIF(TRIM(e.estado), ''), 'activa') = 'activa'";
+            }
+            $legacySql .= ' ORDER BY e.nombre ASC';
+            $rows = $this->connection->fetchAllAssociative($legacySql, $legacyParams);
+        }
 
         return array_map(
             static function (array $row): array {
@@ -75,10 +94,32 @@ final class VaraderoService
                     'ubicacion' => $row['ubicacion'] !== null ? (string) $row['ubicacion'] : null,
                     'estado_padron_id' => isset($row['estado_padron_id']) ? (int) $row['estado_padron_id'] : null,
                     'estado_padron' => $row['estado_padron'] !== null ? (string) $row['estado_padron'] : null,
+                    'vinculo_rol' => $row['vinculo_rol'] !== null ? (string) $row['vinculo_rol'] : 'titular',
                 ];
             },
             $rows
         );
+    }
+
+    public function socioPoseeEmbarcacion(int $numeroSocio, int $embarcacionId): bool
+    {
+        $linked = (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM cnb_app.socio_embarcacion
+             WHERE numero_socio = ? AND embarcacion_id = ?',
+            [$numeroSocio, $embarcacionId]
+        );
+        if ($linked > 0) {
+            return true;
+        }
+
+        // Compatibilidad con datos previos a la migracion M2M.
+        $legacy = (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM cnb_app.embarcaciones
+             WHERE id = ? AND numero_socio = ?',
+            [$embarcacionId, $numeroSocio]
+        );
+
+        return $legacy > 0;
     }
 
     /**
@@ -362,10 +403,10 @@ final class VaraderoService
             return ['ok' => false, 'error' => 'Embarcacion no encontrada', 'status' => 404];
         }
 
-        if ((int) ($embarcacion['numero_socio'] ?? 0) !== $numeroSocio) {
+        if (!$this->socioPoseeEmbarcacion($numeroSocio, $embarcacionId)) {
             return [
                 'ok' => false,
-                'error' => 'La embarcacion no pertenece al socio seleccionado',
+                'error' => 'La embarcacion no pertenece al socio seleccionado (ni como cotitular)',
                 'status' => 400,
             ];
         }

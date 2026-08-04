@@ -8,8 +8,21 @@
             <h1 class="h3 mb-1">Panel operativo</h1>
             <p class="text-muted mb-0">Gestión de socios, varadero, tareas, marineros y activos del club.</p>
         </div>
-        <a class="btn btn-primary" href="{{ path('admin_varadero') }}">Planificador de varadero</a>
+        <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-outline-primary" href="{{ path('admin_nivel_lago') }}">Nivel del lago</a>
+            <a class="btn btn-primary" href="{{ path('admin_varadero') }}">Planificador de varadero</a>
+        </div>
     </header>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h2 class="h5 mb-1">Nivel del lago</h2>
+                <p class="text-muted mb-0">Grafico de msnm · ultima semana, mes o año.</p>
+            </div>
+            <a class="btn btn-primary" href="{{ path('admin_nivel_lago') }}">Abrir grafico</a>
+        </div>
+    </div>
 
     <div class="row g-3">
         {% for name, resource in resources %}

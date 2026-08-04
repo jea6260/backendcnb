@@ -36,4 +36,9 @@ psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/02_socio_portal.sql
 echo "Aplicando mediciones de nivel..."
 psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/03_mediciones_nivel.sql
 
+if [ -f sql/015_socio_embarcacion_m2m_foto_geofence.sql ]; then
+  echo "Aplicando M2M socio-embarcacion / foto / relays..."
+  psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f sql/015_socio_embarcacion_m2m_foto_geofence.sql
+fi
+
 echo "OK: base inicializada."

@@ -29,10 +29,31 @@ final class ResourceRegistry
                     'email' => ['label' => 'Email', 'type' => 'email', 'list' => true],
                     'telefono' => ['label' => 'Telefono', 'type' => 'text', 'list' => true],
                     'documento' => ['label' => 'Documento', 'type' => 'text'],
+                    'foto_perfil' => [
+                        'label' => 'Foto perfil (patron facial)',
+                        'type' => 'textarea',
+                        'list' => false,
+                        'help' => 'Imagen base64/data-url del socio. Se usa como patron de reconocimiento facial.',
+                    ],
                     'estado' => ['label' => 'Estado', 'type' => 'choice', 'required' => true, 'default' => 'activo', 'list' => true, 'choices' => [
                         'activo' => 'Activo',
                         'suspendido' => 'Suspendido',
                         'baja' => 'Baja',
+                    ]],
+                ],
+            ],
+            'socio-embarcacion' => [
+                'table' => 'socio_embarcacion',
+                'label' => 'Socios ↔ Embarcaciones',
+                'singular' => 'Vinculo socio-embarcacion',
+                'description' => 'Un socio puede tener varias embarcaciones y una embarcacion varios socios.',
+                'fields' => [
+                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'embarcacion_id' => ['label' => 'Embarcacion', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'embarcaciones', 'label' => "nombre || COALESCE(' - ' || matricula, '')"]],
+                    'rol' => ['label' => 'Rol', 'type' => 'choice', 'required' => true, 'default' => 'titular', 'list' => true, 'choices' => [
+                        'titular' => 'Titular',
+                        'cotitular' => 'Cotitular',
+                        'autorizado' => 'Autorizado',
                     ]],
                 ],
             ],
@@ -64,7 +85,13 @@ final class ResourceRegistry
                         'agua' => 'Agua',
                         'tierra' => 'Tierra',
                     ]],
-                    'numero_socio' => ['label' => 'Nro socio', 'type' => 'relation', 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'numero_socio' => [
+                        'label' => 'Socio titular (legacy)',
+                        'type' => 'relation',
+                        'list' => true,
+                        'help' => 'Preferir vinculos en Socios ↔ Embarcaciones. Se mantiene por compatibilidad.',
+                        'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"],
+                    ],
                     'tipo' => ['label' => 'Tipo', 'type' => 'text', 'required' => true, 'default' => 'velero', 'list' => true],
                     'modelo' => ['label' => 'Modelo', 'type' => 'text', 'list' => true],
                     'nombre' => ['label' => 'Nombre', 'type' => 'text', 'required' => true, 'list' => true],
@@ -555,7 +582,14 @@ final class ResourceRegistry
         $params = [];
 
         if ($numeroSocio !== null) {
-            $sql .= ' AND e.numero_socio = ?';
+            $sql .= ' AND (
+                e.numero_socio = ?
+                OR EXISTS (
+                    SELECT 1 FROM cnb_app.socio_embarcacion se
+                    WHERE se.embarcacion_id = e.id AND se.numero_socio = ?
+                )
+            )';
+            $params[] = $numeroSocio;
             $params[] = $numeroSocio;
         }
         if ($ambito !== null && $ambito !== '') {

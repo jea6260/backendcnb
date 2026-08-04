@@ -1,0 +1,131 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Nivel del lago · CNB Operaciones{% endblock %}
+
+{% block stylesheets %}
+    <style>
+        .nivel-chart-wrap {
+            position: relative;
+            height: 360px;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            padding: 1rem;
+        }
+        .rango-btn.active {
+            background: #002147 !important;
+            border-color: #002147 !important;
+            color: #fff !important;
+        }
+    </style>
+{% endblock %}
+
+{% block body %}
+    <header class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <h1 class="h3 mb-1">Nivel del lago</h1>
+            <p class="text-muted mb-0">Evolucion msnm · {{ desde }} → {{ hasta }} · {{ total }} lecturas</p>
+        </div>
+        <div class="btn-group" role="group" aria-label="Rango">
+            <a class="btn btn-outline-primary rango-btn {{ rango == 'semana' ? 'active' : '' }}"
+               href="{{ path('admin_nivel_lago', {rango: 'semana'}) }}">Ultima semana</a>
+            <a class="btn btn-outline-primary rango-btn {{ rango == 'mes' ? 'active' : '' }}"
+               href="{{ path('admin_nivel_lago', {rango: 'mes'}) }}">Ultimo mes</a>
+            <a class="btn btn-outline-primary rango-btn {{ rango == 'anio' ? 'active' : '' }}"
+               href="{{ path('admin_nivel_lago', {rango: 'anio'}) }}">Ultimo año</a>
+        </div>
+    </header>
+
+    {% if ultima %}
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="text-muted small">Ultima medicion</div>
+                        <div class="fs-3 fw-bold text-primary">{{ ultima.msnm }} msnm</div>
+                        <div class="small">{{ ultima.fecha }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="text-muted small">Profundidad</div>
+                        <div class="fs-4 fw-semibold">{{ ultima.profundidad_cm ?? '—' }} cm</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="text-muted small">Distancia medida</div>
+                        <div class="fs-4 fw-semibold">{{ ultima.distancia_medida_cm ?? '—' }} cm</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="nivel-chart-wrap mb-4">
+        {% if valores is empty %}
+            <div class="d-flex h-100 align-items-center justify-content-center text-muted">
+                Sin mediciones en este rango.
+            </div>
+        {% else %}
+            <canvas id="nivelChart"></canvas>
+        {% endif %}
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-outline-primary" href="{{ path('admin_resource_index', {resource: 'mediciones-nivel'}) }}">
+            Ver tabla / CRUD
+        </a>
+        <a class="btn btn-outline-secondary" href="{{ path('admin_dashboard') }}">Volver al panel</a>
+    </div>
+{% endblock %}
+
+{% block javascripts %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        const labels = {{ labels|json_encode|raw }};
+        const valores = {{ valores|json_encode|raw }};
+        const canvas = document.getElementById('nivelChart');
+        if (canvas && labels.length) {
+            new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'msnm',
+                        data: valores,
+                        borderColor: '#002147',
+                        backgroundColor: 'rgba(0, 33, 71, 0.12)',
+                        fill: true,
+                        tension: 0.25,
+                        pointRadius: labels.length > 60 ? 0 : 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                maxRotation: 0,
+                                autoSkip: true,
+                                maxTicksLimit: 10
+                            }
+                        },
+                        y: {
+                            title: { display: true, text: 'msnm' }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+{% endblock %}

@@ -151,6 +151,49 @@ final class AdminController extends AbstractController
         ]);
     }
 
+    #[Route('/admin/nivel-lago', name: 'admin_nivel_lago', priority: 25, methods: ['GET'])]
+    public function nivelLago(Request $request): Response
+    {
+        $rango = trim((string) $request->query->get('rango', 'semana'));
+        if (!in_array($rango, ['semana', 'mes', 'anio'], true)) {
+            $rango = 'semana';
+        }
+
+        $hasta = new \DateTimeImmutable('now', new \DateTimeZone('America/Argentina/Buenos_Aires'));
+        $desde = match ($rango) {
+            'mes' => $hasta->modify('-30 days'),
+            'anio' => $hasta->modify('-365 days'),
+            default => $hasta->modify('-7 days'),
+        };
+
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT fecha, msnm, profundidad_cm, distancia_medida_cm
+             FROM cnb_app.mediciones_nivel
+             WHERE fecha >= ? AND fecha <= ?
+             ORDER BY fecha ASC',
+            [$desde->format('Y-m-d H:i:s'), $hasta->format('Y-m-d H:i:s')]
+        );
+
+        $labels = [];
+        $valores = [];
+        foreach ($rows as $row) {
+            $labels[] = substr((string) $row['fecha'], 0, 16);
+            $valores[] = isset($row['msnm']) ? (float) $row['msnm'] : null;
+        }
+
+        $ultima = $rows === [] ? null : $this->registry->normalizeRow($rows[array_key_last($rows)]);
+
+        return $this->render('admin/nivel_lago.html.twig', [
+            'rango' => $rango,
+            'desde' => $desde->format('Y-m-d H:i'),
+            'hasta' => $hasta->format('Y-m-d H:i'),
+            'labels' => $labels,
+            'valores' => $valores,
+            'ultima' => $ultima,
+            'total' => count($rows),
+        ]);
+    }
+
     #[Route('/admin/varadero/timeline', name: 'admin_varadero_timeline', priority: 20, methods: ['GET'])]
     public function varaderoTimeline(Request $request): JsonResponse
     {

@@ -2,6 +2,8 @@
 
 namespace App\Controller;
 
+use App\Service\ClubGeofence;
+use App\Service\RelayService;
 use App\Service\ResourceRegistry;
 use App\Service\VaraderoService;
 use Doctrine\DBAL\Connection;
@@ -19,6 +21,7 @@ final class SocioPortalController extends AbstractController
         private readonly Connection $connection,
         private readonly ResourceRegistry $registry,
         private readonly VaraderoService $varadero,
+        private readonly RelayService $relay,
     ) {
     }
 
@@ -619,12 +622,18 @@ final class SocioPortalController extends AbstractController
         }
 
         try {
+            $now = date('c');
             $this->connection->update('cnb_app.socio_acceso', [
                 'facial_reference' => $image,
-                'updated_at' => date('c'),
+                'updated_at' => $now,
             ], ['numero_socio' => $socio['numero_socio']]);
 
-            return $this->json(['data' => ['enrolled' => true]]);
+            // La foto de perfil del socio es el mismo patron facial.
+            $this->connection->update('cnb_app.socios', [
+                'foto_perfil' => $image,
+            ], ['numero_socio' => $socio['numero_socio']]);
+
+            return $this->json(['data' => ['enrolled' => true, 'foto_perfil' => true]]);
         } catch (DbalException $exception) {
             return $this->dbalError($exception);
         }
@@ -641,14 +650,43 @@ final class SocioPortalController extends AbstractController
         $data = $this->jsonBody($request);
         $porton = trim((string) ($data['porton'] ?? 'principal'));
         $image = (string) ($data['imagen_base64'] ?? '');
+        $lat = isset($data['latitud']) && is_numeric($data['latitud']) ? (float) $data['latitud'] : null;
+        $lng = isset($data['longitud']) && is_numeric($data['longitud']) ? (float) $data['longitud'] : null;
 
         if ($image === '') {
             return $this->json(['error' => 'imagen_base64 es obligatoria para verificacion facial'], Response::HTTP_BAD_REQUEST);
         }
 
+        $geo = ClubGeofence::validate($lat, $lng);
+        if (!$geo['ok']) {
+            $this->logRelayEvent(
+                (int) $socio['numero_socio'],
+                'porton',
+                $porton,
+                'rechazado',
+                $lat,
+                $lng,
+                $geo['distance_m'],
+                null,
+                $geo['error']
+            );
+
+            return $this->json([
+                'error' => $geo['error'],
+                'data' => [
+                    'resultado' => 'rechazado',
+                    'distancia_m' => $geo['distance_m'],
+                    'geofence_m' => ClubGeofence::RADIUS_METERS,
+                ],
+            ], Response::HTTP_FORBIDDEN);
+        }
+
         try {
             $reference = $this->connection->fetchOne(
-                'SELECT facial_reference FROM cnb_app.socio_acceso WHERE numero_socio = ?',
+                'SELECT COALESCE(s.foto_perfil, sa.facial_reference)
+                 FROM cnb_app.socio_acceso sa
+                 LEFT JOIN cnb_app.socios s ON s.numero_socio = sa.numero_socio
+                 WHERE sa.numero_socio = ?',
                 [$socio['numero_socio']]
             );
 
@@ -657,7 +695,7 @@ final class SocioPortalController extends AbstractController
             $resultado = $approved ? 'aprobado' : ($reference ? 'rechazado' : 'error');
             $observaciones = $reference
                 ? ($approved ? 'Apertura autorizada por reconocimiento facial.' : 'Rostro no coincide con el registro.')
-                : 'Debe registrar su rostro antes de usar portones.';
+                : 'Debe registrar su rostro / foto de perfil antes de usar portones.';
 
             $this->connection->insert('cnb_app.accesos_porton', [
                 'numero_socio' => $socio['numero_socio'],
@@ -669,26 +707,171 @@ final class SocioPortalController extends AbstractController
             ]);
 
             if (!$reference) {
+                $this->logRelayEvent(
+                    (int) $socio['numero_socio'],
+                    'porton',
+                    $porton,
+                    'error',
+                    $lat,
+                    $lng,
+                    $geo['distance_m'],
+                    $score,
+                    $observaciones
+                );
+
                 return $this->json(['error' => $observaciones], Response::HTTP_PRECONDITION_FAILED);
             }
 
             if (!$approved) {
+                $this->logRelayEvent(
+                    (int) $socio['numero_socio'],
+                    'porton',
+                    $porton,
+                    'rechazado',
+                    $lat,
+                    $lng,
+                    $geo['distance_m'],
+                    $score,
+                    $observaciones
+                );
+
                 return $this->json([
                     'error' => $observaciones,
                     'data' => ['puntaje_facial' => $score, 'resultado' => $resultado],
                 ], Response::HTTP_FORBIDDEN);
             }
 
+            $relay = $this->relay->trigger('porton', [
+                'numero_socio' => $socio['numero_socio'],
+                'porton' => $porton,
+                'distancia_m' => $geo['distance_m'],
+            ]);
+
+            $this->logRelayEvent(
+                (int) $socio['numero_socio'],
+                'porton',
+                $porton,
+                'aprobado',
+                $lat,
+                $lng,
+                $geo['distance_m'],
+                $score,
+                $observaciones . ' ' . $relay['detail']
+            );
+
             return $this->json([
                 'data' => [
                     'resultado' => $resultado,
                     'puntaje_facial' => $score,
                     'porton' => $porton,
+                    'distancia_m' => $geo['distance_m'],
+                    'relay' => $relay,
                     'mensaje' => 'Porton ' . $porton . ' abierto correctamente.',
                 ],
             ]);
         } catch (DbalException $exception) {
             return $this->dbalError($exception);
+        }
+    }
+
+    #[Route('/timbre-marineros', name: 'api_socio_timbre_marineros', methods: ['POST'])]
+    public function timbreMarineros(Request $request): JsonResponse
+    {
+        $socio = $this->authenticate($request);
+        if ($socio instanceof JsonResponse) {
+            return $socio;
+        }
+
+        $data = $this->jsonBody($request);
+        $lat = isset($data['latitud']) && is_numeric($data['latitud']) ? (float) $data['latitud'] : null;
+        $lng = isset($data['longitud']) && is_numeric($data['longitud']) ? (float) $data['longitud'] : null;
+
+        $geo = ClubGeofence::validate($lat, $lng);
+        if (!$geo['ok']) {
+            $this->logRelayEvent(
+                (int) $socio['numero_socio'],
+                'timbre_marineros',
+                'marineros',
+                'rechazado',
+                $lat,
+                $lng,
+                $geo['distance_m'],
+                null,
+                $geo['error']
+            );
+
+            return $this->json([
+                'error' => $geo['error'],
+                'data' => [
+                    'resultado' => 'rechazado',
+                    'distancia_m' => $geo['distance_m'],
+                    'geofence_m' => ClubGeofence::RADIUS_METERS,
+                    'punto' => ['lat' => ClubGeofence::LAT, 'lng' => ClubGeofence::LNG],
+                ],
+            ], Response::HTTP_FORBIDDEN);
+        }
+
+        try {
+            $relay = $this->relay->trigger('timbre_marineros', [
+                'numero_socio' => $socio['numero_socio'],
+                'distancia_m' => $geo['distance_m'],
+            ]);
+
+            $this->logRelayEvent(
+                (int) $socio['numero_socio'],
+                'timbre_marineros',
+                'marineros',
+                'aprobado',
+                $lat,
+                $lng,
+                $geo['distance_m'],
+                null,
+                $relay['detail']
+            );
+
+            return $this->json([
+                'data' => [
+                    'resultado' => 'aprobado',
+                    'distancia_m' => $geo['distance_m'],
+                    'relay' => $relay,
+                    'mensaje' => 'Timbre de marineros activado.',
+                ],
+            ]);
+        } catch (DbalException $exception) {
+            return $this->dbalError($exception);
+        }
+    }
+
+    /**
+     * @param float|null $distance
+     * @param float|null $score
+     */
+    private function logRelayEvent(
+        int $numeroSocio,
+        string $tipo,
+        string $destino,
+        string $resultado,
+        ?float $lat,
+        ?float $lng,
+        ?float $distance,
+        ?float $score,
+        ?string $observaciones,
+    ): void {
+        try {
+            $this->connection->insert('cnb_app.eventos_relay', [
+                'numero_socio' => $numeroSocio,
+                'tipo' => $tipo,
+                'destino' => $destino,
+                'resultado' => $resultado,
+                'latitud' => $lat,
+                'longitud' => $lng,
+                'distancia_m' => $distance,
+                'puntaje_facial' => $score,
+                'observaciones' => $observaciones,
+                'created_at' => (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format(DATE_ATOM),
+            ]);
+        } catch (\Throwable) {
+            // Si la migracion 015 aun no corrio, no romper el flujo principal.
         }
     }
 
@@ -708,7 +891,8 @@ final class SocioPortalController extends AbstractController
             'documento' => $row['documento'] ?? null,
             'estado' => $row['socio_estado'] ?? 'activo',
             'biometric_habilitado' => (bool) ($row['biometric_habilitado'] ?? false),
-            'facial_registrado' => !empty($row['facial_reference']),
+            'facial_registrado' => !empty($row['facial_reference']) || !empty($row['foto_perfil']),
+            'foto_perfil' => !empty($row['foto_perfil']),
         ];
     }
 
@@ -729,7 +913,8 @@ final class SocioPortalController extends AbstractController
 
         try {
             $row = $this->connection->fetchAssociative(
-                'SELECT sa.*, s.numero_socio, s.nombre, s.apellido, s.telefono, s.documento, s.estado AS socio_estado
+                'SELECT sa.*, s.numero_socio, s.nombre, s.apellido, s.telefono, s.documento,
+                        s.estado AS socio_estado, s.foto_perfil
                  FROM cnb_app.socio_sesiones ss
                  INNER JOIN cnb_app.socio_acceso sa ON sa.numero_socio = ss.numero_socio
                  INNER JOIN cnb_app.socios s ON s.numero_socio = ss.numero_socio

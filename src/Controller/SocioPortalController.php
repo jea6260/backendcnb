@@ -199,6 +199,48 @@ final class SocioPortalController extends AbstractController
         return $this->json(['data' => $socio]);
     }
 
+    #[Route('/foto-perfil', name: 'api_socio_foto_perfil_get', methods: ['GET'])]
+    public function fotoPerfilGet(Request $request): JsonResponse
+    {
+        $socio = $this->authenticate($request);
+        if ($socio instanceof JsonResponse) {
+            return $socio;
+        }
+
+        try {
+            $foto = $this->connection->fetchOne(
+                'SELECT COALESCE(s.foto_perfil, sa.facial_reference)
+                 FROM cnb_app.socios s
+                 LEFT JOIN cnb_app.socio_acceso sa ON sa.numero_socio = s.numero_socio
+                 WHERE s.numero_socio = ?',
+                [$socio['numero_socio']]
+            );
+
+            if (!$foto) {
+                return $this->json([
+                    'error' => 'El socio no tiene foto de perfil cargada',
+                    'data' => ['tiene_foto' => false],
+                ], Response::HTTP_NOT_FOUND);
+            }
+
+            return $this->json([
+                'data' => [
+                    'tiene_foto' => true,
+                    'imagen_base64' => (string) $foto,
+                ],
+            ]);
+        } catch (DbalException $exception) {
+            return $this->dbalError($exception);
+        }
+    }
+
+    #[Route('/foto-perfil', name: 'api_socio_foto_perfil_put', methods: ['POST', 'PUT', 'PATCH'])]
+    public function fotoPerfilPut(Request $request): JsonResponse
+    {
+        // Alias de enroll facial: misma foto sirve para carnet y reconocimiento.
+        return $this->facialEnroll($request);
+    }
+
     #[Route('/password', name: 'api_socio_password', methods: ['PATCH', 'PUT'])]
     public function changePassword(Request $request): JsonResponse
     {

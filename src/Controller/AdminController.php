@@ -314,8 +314,10 @@ final class AdminController extends AbstractController
                         return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
                     }
                 } else {
+                    $data = $this->mergeUploadedImages($request, $definition, $data);
                     $payload = $this->registry->payloadFor($definition, $data, form: true);
                     $this->connection->insert($definition['table'], $payload);
+                    $this->syncSocioFacialFromFoto($resource, $payload);
                     $this->addFlash('success', sprintf('%s creado correctamente.', $definition['singular']));
 
                     return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
@@ -360,8 +362,10 @@ final class AdminController extends AbstractController
                         return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
                     }
                 } else {
+                    $data = $this->mergeUploadedImages($request, $definition, $data);
                     $payload = $this->registry->payloadFor($definition, $data, patch: true, form: true);
                     $this->connection->update($definition['table'], $payload, [$pk => $id]);
+                    $this->syncSocioFacialFromFoto($resource, $payload + ['numero_socio' => $id]);
                     $this->addFlash('success', sprintf('%s actualizado correctamente.', $definition['singular']));
 
                     return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
@@ -418,5 +422,74 @@ final class AdminController extends AbstractController
             'id' => $id,
             'primary_key' => $this->registry->primaryKey($definition),
         ]);
+    }
+
+    /**
+     * Si el navegador envía el archivo sin pasar por FileReader, lo convierte a data-URL.
+     *
+     * @param array<string, mixed> $definition
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function mergeUploadedImages(Request $request, array $definition, array $data): array
+    {
+        foreach ($this->registry->formFields($definition) as $name => $field) {
+            if (($field['type'] ?? null) !== 'image') {
+                continue;
+            }
+
+            $file = $request->files->get($name.'_file');
+            if ($file === null || !$file->isValid()) {
+                continue;
+            }
+
+            $mime = (string) ($file->getMimeType() ?: 'image/jpeg');
+            if (!str_starts_with($mime, 'image/')) {
+                continue;
+            }
+            if ($file->getSize() > 4 * 1024 * 1024) {
+                continue;
+            }
+
+            $binary = @file_get_contents($file->getPathname());
+            if ($binary === false || $binary === '') {
+                continue;
+            }
+
+            $data[$name] = 'data:'.$mime.';base64,'.base64_encode($binary);
+        }
+
+        return $data;
+    }
+
+    /**
+     * La foto de perfil del socio también alimenta el reconocimiento facial.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function syncSocioFacialFromFoto(string $resource, array $payload): void
+    {
+        if ($resource !== 'socios' || !array_key_exists('foto_perfil', $payload)) {
+            return;
+        }
+
+        $numeroSocio = $payload['numero_socio'] ?? null;
+        if ($numeroSocio === null || $numeroSocio === '') {
+            return;
+        }
+
+        $exists = $this->connection->fetchOne(
+            'SELECT 1 FROM cnb_app.socio_acceso WHERE numero_socio = ?',
+            [$numeroSocio]
+        );
+
+        if (!$exists) {
+            return;
+        }
+
+        $this->connection->update('cnb_app.socio_acceso', [
+            'facial_reference' => $payload['foto_perfil'],
+            'updated_at' => date('c'),
+        ], ['numero_socio' => $numeroSocio]);
     }
 }

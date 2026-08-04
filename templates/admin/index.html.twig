@@ -96,6 +96,17 @@
                                 <td>
                                     {% if field.type == 'boolean' %}
                                         {{ value ? 'Si' : 'No' }}
+                                    {% elseif field.type == 'image' %}
+                                        {% if value %}
+                                            <img
+                                                src="{{ value starts with 'data:' ? value : 'data:image/jpeg;base64,' ~ value }}"
+                                                alt="Foto"
+                                                class="rounded border"
+                                                style="width: 48px; height: 64px; object-fit: cover;"
+                                            >
+                                        {% else %}
+                                            <span class="text-muted">Sin foto</span>
+                                        {% endif %}
                                     {% elseif field.type == 'relation' %}
                                         {{ attribute(row, name ~ '_label')|default(value) }}
                                     {% elseif field.type == 'choice' and field.choices[value] is defined %}

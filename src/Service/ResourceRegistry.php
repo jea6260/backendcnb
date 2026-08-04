@@ -30,10 +30,10 @@ final class ResourceRegistry
                     'telefono' => ['label' => 'Telefono', 'type' => 'text', 'list' => true],
                     'documento' => ['label' => 'Documento', 'type' => 'text'],
                     'foto_perfil' => [
-                        'label' => 'Foto perfil (patron facial)',
-                        'type' => 'textarea',
-                        'list' => false,
-                        'help' => 'Imagen base64/data-url del socio. Se usa como patron de reconocimiento facial.',
+                        'label' => 'Foto perfil',
+                        'type' => 'image',
+                        'list' => true,
+                        'help' => 'Foto del socio para carnet y reconocimiento facial.',
                     ],
                     'estado' => ['label' => 'Estado', 'type' => 'choice', 'required' => true, 'default' => 'activo', 'list' => true, 'choices' => [
                         'activo' => 'Activo',
@@ -479,6 +479,16 @@ final class ResourceRegistry
 
             if ($field['type'] === 'boolean' && $form && !$patch) {
                 $payload[$column] = array_key_exists($column, $source);
+                continue;
+            }
+
+            if ($field['type'] === 'image') {
+                if (!array_key_exists($column, $source)) {
+                    continue;
+                }
+                $raw = trim((string) $source[$column]);
+                // En formularios web, vacío = quitar foto (también en edición).
+                $payload[$column] = $raw === '' ? null : $raw;
                 continue;
             }
 

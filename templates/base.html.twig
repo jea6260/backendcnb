@@ -95,9 +95,6 @@
         {% block stylesheets %}
         {% endblock %}
 
-        {% block javascripts %}
-        {% endblock %}
-
         {% set frankenphpHotReload = app.request.server.get('FRANKENPHP_HOT_RELOAD') %}
         {% if frankenphpHotReload %}
         <meta name="frankenphp-hot-reload:url" content="{{ frankenphpHotReload }}">
@@ -134,5 +131,7 @@
             {% endfor %}
             {% block body %}{% endblock %}
         </main>
+        {% block javascripts %}
+        {% endblock %}
     </body>
 </html>

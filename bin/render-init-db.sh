@@ -27,18 +27,25 @@ esac
 # Quitar query string (?serverVersion=...) que psql no entiende
 PSQL_URL=$(printf '%s' "$PSQL_URL" | sed 's/?.*$//')
 
-echo "Aplicando schema operativo..."
-psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/01_schema.sql
+echo "Detectando estado de la base..."
+HAS_SOCIOS=$(psql "$PSQL_URL" -Atqc "SELECT COALESCE(to_regclass('cnb_app.socios')::text, '')")
 
-echo "Aplicando portal de socios..."
-psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/02_socio_portal.sql
+if [ -z "$HAS_SOCIOS" ]; then
+  echo "Aplicando schema operativo (base vacia)..."
+  psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/01_schema.sql
 
-echo "Aplicando mediciones de nivel..."
-psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/03_mediciones_nivel.sql
+  echo "Aplicando portal de socios..."
+  psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/02_socio_portal.sql
+
+  echo "Aplicando mediciones de nivel..."
+  psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f docker/postgres/init/03_mediciones_nivel.sql
+else
+  echo "Schema base ya presente (cnb_app.socios). Se omiten 01/02/03."
+fi
 
 if [ -f sql/015_socio_embarcacion_m2m_foto_geofence.sql ]; then
   echo "Aplicando M2M socio-embarcacion / foto / relays..."
   psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f sql/015_socio_embarcacion_m2m_foto_geofence.sql
 fi
 
-echo "OK: base inicializada."
+echo "OK: base inicializada / actualizada."

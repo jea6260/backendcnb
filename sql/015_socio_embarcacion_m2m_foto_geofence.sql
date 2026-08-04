@@ -209,6 +209,7 @@ CREATE INDEX IF NOT EXISTS idx_socio_embarcacion_socio
 INSERT INTO cnb_app.socio_embarcacion (numero_socio, embarcacion_id, rol)
 SELECT e.numero_socio::INTEGER, e.id, 'titular'
 FROM cnb_app.embarcaciones e
+INNER JOIN cnb_app.socios s ON s.numero_socio = e.numero_socio::INTEGER
 WHERE e.numero_socio IS NOT NULL
 ON CONFLICT (numero_socio, embarcacion_id) DO NOTHING;
 

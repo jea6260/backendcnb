@@ -1,30 +1,42 @@
 :root {
-    --cnb-navy: #002147;
-    --cnb-navy-dark: #001428;
-    --cnb-silver: #c0c0c0;
-    --cnb-silver-light: #e8e8e8;
-    --cnb-surface: #f0f4f8;
+    --cnb-navy: #071a33;
+    --cnb-navy-dark: #041226;
+    --cnb-deep: #0c4a6e;
+    --cnb-gold: #c6a15b;
+    --cnb-gold-soft: #e8d7a8;
+    --cnb-foam: #f7f4ee;
+    --cnb-silver: #c6a15b;
+    --cnb-silver-light: #e4d7b8;
+    --cnb-surface: #f4f0e6;
 
     --bs-primary: var(--cnb-navy);
-    --bs-primary-rgb: 0, 33, 71;
-    --bs-secondary: #6c7a89;
-    --bs-secondary-rgb: 108, 122, 137;
-    --bs-link-color: var(--cnb-navy);
-    --bs-link-hover-color: var(--cnb-navy-dark);
-    --bs-body-bg: var(--cnb-surface);
+    --bs-primary-rgb: 7, 26, 51;
+    --bs-secondary: #8a7340;
+    --bs-secondary-rgb: 138, 115, 64;
+    --bs-link-color: var(--cnb-deep);
+    --bs-link-hover-color: var(--cnb-navy);
+    --bs-body-bg: transparent;
+    --bs-body-color: var(--cnb-navy);
     --bs-border-color: var(--cnb-silver-light);
 }
 
 body {
-    background-color: var(--cnb-surface);
+    min-height: 100vh;
     color: var(--cnb-navy);
+    background-color: var(--cnb-navy-dark);
+    background-image:
+        linear-gradient(180deg, rgba(4, 18, 38, 0.35), rgba(4, 18, 38, 0.55)),
+        url("/images/cnb-waters.svg");
+    background-size: cover;
+    background-attachment: fixed;
+    background-position: center;
 }
 
 .cnb-header {
-    background: #fff;
-    border-bottom: 2px solid var(--cnb-silver);
+    background: rgba(247, 244, 238, 0.94);
+    border-bottom: 3px solid var(--cnb-gold);
     padding: 0.75rem 0;
-    box-shadow: 0 2px 8px rgba(0, 33, 71, 0.06);
+    box-shadow: 0 8px 24px rgba(4, 18, 38, 0.25);
 }
 
 .cnb-brand {
@@ -39,61 +51,80 @@ body {
 }
 
 .cnb-brand-logo {
-    width: 72px;
+    width: auto;
     height: 72px;
-    object-fit: cover;
-    border-radius: 50%;
-    border: 2px solid var(--cnb-silver);
     flex-shrink: 0;
+    display: block;
 }
 
 .cnb-brand-title {
     color: var(--cnb-navy);
     font-size: 1.5rem;
     font-weight: 700;
-    line-height: 1.2;
-    letter-spacing: 0.01em;
+    line-height: 1.15;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.cnb-brand-sub {
+    display: block;
+    margin-top: 0.15rem;
+    color: var(--cnb-deep);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
 }
 
 .cnb-header .nav-link {
     color: var(--cnb-navy);
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .cnb-header .nav-link:hover,
 .cnb-header .nav-link:focus {
-    color: var(--cnb-navy-dark);
+    color: var(--cnb-deep);
+}
+
+main.container-fluid {
+    margin-top: 0.5rem;
+    background: rgba(247, 244, 238, 0.94);
+    border: 1px solid rgba(198, 161, 91, 0.45);
+    border-radius: 18px;
+    box-shadow: 0 16px 40px rgba(4, 18, 38, 0.28);
 }
 
 .btn-primary {
     --bs-btn-bg: var(--cnb-navy);
-    --bs-btn-border-color: var(--cnb-navy);
-    --bs-btn-hover-bg: var(--cnb-navy-dark);
-    --bs-btn-hover-border-color: var(--cnb-navy-dark);
+    --bs-btn-border-color: var(--cnb-gold);
+    --bs-btn-hover-bg: var(--cnb-deep);
+    --bs-btn-hover-border-color: var(--cnb-gold-soft);
     --bs-btn-active-bg: var(--cnb-navy-dark);
-    --bs-btn-active-border-color: var(--cnb-navy-dark);
+    --bs-btn-active-border-color: var(--cnb-gold);
 }
 
 .btn-outline-primary {
     --bs-btn-color: var(--cnb-navy);
-    --bs-btn-border-color: var(--cnb-navy);
+    --bs-btn-border-color: var(--cnb-gold);
     --bs-btn-hover-bg: var(--cnb-navy);
-    --bs-btn-hover-border-color: var(--cnb-navy);
+    --bs-btn-hover-border-color: var(--cnb-gold);
     --bs-btn-active-bg: var(--cnb-navy-dark);
-    --bs-btn-active-border-color: var(--cnb-navy-dark);
+    --bs-btn-active-border-color: var(--cnb-gold);
 }
 
 .card {
-    border-color: var(--cnb-silver-light);
+    background: rgba(255, 255, 255, 0.88);
+    border-color: rgba(198, 161, 91, 0.45);
 }
 
 .card .badge.text-bg-secondary {
     background-color: var(--cnb-navy) !important;
+    color: var(--cnb-gold-soft) !important;
 }
 
 .table thead.table-light {
     --bs-table-bg: #fff;
-    border-bottom: 2px solid var(--cnb-silver-light);
+    border-bottom: 2px solid var(--cnb-gold);
 }
 
 .cnb-sort-link {
@@ -105,7 +136,7 @@ body {
 
 .cnb-sort-link:hover,
 .cnb-sort-link:focus {
-    color: var(--cnb-navy-dark);
+    color: var(--cnb-deep);
     text-decoration: underline;
 }
 
@@ -126,17 +157,20 @@ body {
 
 .form-control:focus,
 .form-select:focus {
-    border-color: var(--cnb-silver);
-    box-shadow: 0 0 0 0.2rem rgba(0, 33, 71, 0.15);
+    border-color: var(--cnb-gold);
+    box-shadow: 0 0 0 0.2rem rgba(198, 161, 91, 0.28);
 }
 
 @media (max-width: 576px) {
     .cnb-brand-title {
-        font-size: 1.15rem;
+        font-size: 1.05rem;
     }
 
     .cnb-brand-logo {
-        width: 56px;
         height: 56px;
+    }
+
+    main.container-fluid {
+        border-radius: 0;
     }
 }

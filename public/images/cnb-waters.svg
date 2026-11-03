@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#041226"/>
+      <stop offset="45%" stop-color="#0c4a6e"/>
+      <stop offset="100%" stop-color="#071a33"/>
+    </linearGradient>
+  </defs>
+  <rect width="1440" height="900" fill="url(#sky)"/>
+  <g fill="none" stroke="#c6a15b" stroke-opacity="0.35" stroke-width="2">
+    <path d="M-20 620 C 180 560, 360 700, 560 620 S 980 540, 1200 640 S 1500 700, 1500 640"/>
+    <path d="M-20 700 C 200 640, 420 780, 640 700 S 1040 620, 1280 720 S 1520 780, 1520 720"/>
+    <path d="M-20 780 C 220 730, 440 860, 680 780 S 1100 700, 1460 800"/>
+  </g>
+  <g fill="none" stroke="#f7f4ee" stroke-opacity="0.18" stroke-width="3">
+    <path d="M-20 660 C 200 600, 400 740, 620 660 S 1000 580, 1460 680"/>
+    <path d="M-20 740 C 240 680, 460 820, 700 740 S 1120 660, 1460 760"/>
+  </g>
+  <g transform="translate(1180 80)" opacity="0.22" fill="none" stroke="#c6a15b" stroke-width="3">
+    <path d="M40 10 L70 90 H10 Z"/>
+    <path d="M40 90 V150"/>
+    <circle cx="40" cy="120" r="16"/>
+  </g>
+</svg>

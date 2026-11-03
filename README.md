@@ -50,6 +50,15 @@ Credenciales Docker por defecto:
 | Usuario / clave / DB | `cnb_user` / `cnb_password` / `CNBDB` |
 | App URL | http://localhost:8000 |
 
+El panel `/admin` pide usuario y contraseña antes de operar. En desarrollo (`APP_ENV=dev`) salen de `.env.dev`:
+
+| Variable | Valor local |
+|----------|-------------|
+| `ADMIN_USERNAME` | `admin` |
+| `ADMIN_PASSWORD` | `cnb-dev-admin` |
+
+En produccion hay que definir las dos en el entorno del servicio. `ADMIN_PASSWORD` debe tener al menos 8 caracteres. El primer ingreso crea (o actualiza) ese usuario con rol `admin` en `cnb_app.usuarios`. Hace falta el esquema de `sql/016_usuarios_auth.sql`.
+
 Comandos utiles:
 
 ```bash

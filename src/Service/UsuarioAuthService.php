@@ -24,6 +24,10 @@ final class UsuarioAuthService
 
     public const ADMIN_SESSION_NEXT = 'cnb_admin_next';
 
+    public const ADMIN_SESSION_ROL = 'cnb_rol';
+
+    public const ADMIN_SESSION_SOCIO = 'cnb_numero_socio';
+
     public function __construct(private readonly Connection $connection)
     {
     }
@@ -163,6 +167,39 @@ final class UsuarioAuthService
     /**
      * @return array<string, mixed>|null
      */
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function findById(int $id): ?array
+    {
+        if ($id < 1) {
+            return null;
+        }
+
+        try {
+            $row = $this->connection->fetchAssociative(
+                'SELECT id, username, password_hash, rol, numero_socio, marinero_id, activo, cambiar_clave
+                 FROM cnb_app.usuarios WHERE id = ?',
+                [$id]
+            );
+        } catch (DbalException $exception) {
+            if ($this->isMissingRelation($exception)) {
+                return null;
+            }
+
+            throw $exception;
+        }
+
+        if (!$row) {
+            return null;
+        }
+
+        $row['id'] = (int) $row['id'];
+        $row['numero_socio'] = $row['numero_socio'] !== null ? (int) $row['numero_socio'] : null;
+
+        return $row;
+    }
+
     public function findByUsername(string $username): ?array
     {
         try {
@@ -233,8 +270,27 @@ final class UsuarioAuthService
      */
     public function authenticateAdmin(string $username, string $password): array|string
     {
-        if (trim($username) === '' || $password === '') {
+        $result = $this->authenticatePanel($username, $password);
+        if (is_string($result)) {
+            return $result;
+        }
+        if (($result['rol'] ?? '') !== 'admin') {
             return 'Usuario o contraseña invalidos.';
+        }
+
+        return [
+            'id' => $result['id'],
+            'username' => $result['username'],
+        ];
+    }
+
+    /**
+     * @return array{id: int, username: string, rol: string, numero_socio: ?int, cambiar_clave: bool}|string
+     */
+    public function authenticatePanel(string $username, string $password): array|string
+    {
+        if (trim($username) === '' || $password === '') {
+            return 'Usuario o contraseña inválidos.';
         }
 
         if (!$this->schemaReady()) {
@@ -242,21 +298,25 @@ final class UsuarioAuthService
         }
 
         $row = $this->findByUsername($username);
-        if (
-            !$row
-            || ($row['rol'] ?? '') !== 'admin'
-            || !$this->verifyPassword($password, (string) ($row['password_hash'] ?? ''))
-        ) {
-            return 'Usuario o contraseña invalidos.';
+        if (!$row || !$this->verifyPassword($password, (string) ($row['password_hash'] ?? ''))) {
+            return 'Usuario o contraseña inválidos.';
         }
 
         if (!$this->isTruthy($row['activo'] ?? false)) {
-            return 'Usuario inactivo';
+            return 'Usuario inactivo.';
+        }
+
+        $rol = (string) ($row['rol'] ?? '');
+        if (!in_array($rol, ['admin', 'empleado', 'socio'], true)) {
+            return 'Usuario o contraseña inválidos.';
         }
 
         return [
             'id' => (int) $row['id'],
             'username' => (string) $row['username'],
+            'rol' => $rol,
+            'numero_socio' => $row['numero_socio'] !== null ? (int) $row['numero_socio'] : null,
+            'cambiar_clave' => $this->isTruthy($row['cambiar_clave'] ?? false),
         ];
     }
 
@@ -265,30 +325,37 @@ final class UsuarioAuthService
      */
     public function findActiveAdminById(int $id): ?array
     {
-        if ($id < 1) {
+        $user = $this->findActivePanelUser($id);
+        if ($user === null || $user['rol'] !== 'admin') {
             return null;
         }
 
-        try {
-            $row = $this->connection->fetchAssociative(
-                'SELECT id, username, rol, activo FROM cnb_app.usuarios WHERE id = ?',
-                [$id]
-            );
-        } catch (DbalException $exception) {
-            if ($this->isMissingRelation($exception)) {
-                return null;
-            }
+        return [
+            'id' => $user['id'],
+            'username' => $user['username'],
+        ];
+    }
 
-            throw $exception;
+    /**
+     * @return array{id: int, username: string, rol: string, numero_socio: ?int}|null
+     */
+    public function findActivePanelUser(int $id): ?array
+    {
+        $row = $this->findById($id);
+        if ($row === null || !$this->isTruthy($row['activo'] ?? false)) {
+            return null;
         }
 
-        if (!$row || ($row['rol'] ?? '') !== 'admin' || !$this->isTruthy($row['activo'] ?? false)) {
+        $rol = (string) ($row['rol'] ?? '');
+        if (!in_array($rol, ['admin', 'empleado', 'socio'], true)) {
             return null;
         }
 
         return [
             'id' => (int) $row['id'],
             'username' => (string) $row['username'],
+            'rol' => $rol,
+            'numero_socio' => $row['numero_socio'] !== null ? (int) $row['numero_socio'] : null,
         ];
     }
 

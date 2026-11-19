@@ -35,10 +35,18 @@
                 </a>
                 <nav class="nav align-items-center">
                     {% if app.session.get('cnb_admin_username') %}
-                        <a class="nav-link" href="{{ path('admin_dashboard') }}">Admin</a>
-                        <a class="nav-link" href="{{ path('admin_nivel_lago') }}">Nivel del lago</a>
-                        <a class="nav-link" href="{{ path('admin_varadero') }}">Varadero</a>
-                        <a class="nav-link" href="/api/health">API</a>
+                        {% if app.session.get('cnb_rol') == 'socio' %}
+                            <a class="nav-link" href="{{ path('admin_dashboard') }}">Inicio</a>
+                            <a class="nav-link" href="{{ path('admin_nivel_lago') }}">Nivel del lago</a>
+                            <a class="nav-link" href="{{ path('admin_timbre') }}">Timbre</a>
+                            <a class="nav-link" href="{{ path('admin_varadero') }}">Varadero</a>
+                        {% else %}
+                            <a class="nav-link" href="{{ path('admin_dashboard') }}">Admin</a>
+                            <a class="nav-link" href="{{ path('admin_nivel_lago') }}">Nivel del lago</a>
+                            <a class="nav-link" href="{{ path('admin_varadero') }}">Varadero</a>
+                            <a class="nav-link" href="/api/health">API</a>
+                        {% endif %}
+                        <a class="nav-link" href="{{ path('admin_cuenta') }}">Mi cuenta</a>
                         <form method="post" action="{{ path('admin_logout') }}" class="d-flex align-items-center gap-2 ms-2 mb-0">
                             <span class="nav-link py-0">{{ app.session.get('cnb_admin_username') }}</span>
                             <button class="btn btn-outline-primary btn-sm" type="submit">Salir</button>

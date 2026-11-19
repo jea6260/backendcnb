@@ -1,0 +1,39 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Socio · CNB{% endblock %}
+
+{% block body %}
+    <header class="mb-4">
+        <h1 class="h3 mb-1">Hola{% if numero %}, socio #{{ numero }}{% endif %}</h1>
+        <p class="text-muted mb-0">Podés ver el nivel del lago, tocar el timbre y pedir turno de varadero para tu embarcación.</p>
+    </header>
+    <div class="row g-3">
+        <div class="col-12 col-md-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body d-flex flex-column">
+                    <h2 class="h5">Nivel del lago</h2>
+                    <p class="text-muted">Última semana, mes o año.</p>
+                    <a class="btn btn-primary mt-auto" href="{{ path('admin_nivel_lago') }}">Ver nivel</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body d-flex flex-column">
+                    <h2 class="h5">Timbre</h2>
+                    <p class="text-muted">Suena en la sede en menos de 15 segundos.</p>
+                    <a class="btn btn-primary mt-auto" href="{{ path('admin_timbre') }}">Tocar timbre</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body d-flex flex-column">
+                    <h2 class="h5">Varadero</h2>
+                    <p class="text-muted">Turno solo para tus embarcaciones.</p>
+                    <a class="btn btn-primary mt-auto" href="{{ path('admin_varadero') }}">Pedir turno</a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

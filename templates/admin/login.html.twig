@@ -4,43 +4,59 @@
 
 {% block body %}
     <div class="row justify-content-center">
-        <div class="col-12 col-md-6 col-lg-4">
+        <div class="col-12 col-lg-10">
             <h1 class="h3 mb-3">Ingreso al panel</h1>
-            <p class="text-muted">Usuario y contraseña para operar el club.</p>
-            {% if not configured %}
-                <p class="text-muted small">Definí <code>ADMIN_USERNAME</code> y <code>ADMIN_PASSWORD</code> para habilitar el ingreso.</p>
-            {% endif %}
+            <p class="text-muted">Socios y personal entran por caminos distintos.</p>
             {% if error %}
                 <div class="alert alert-danger">{{ error }}</div>
             {% endif %}
-            <form method="post" action="{{ path('admin_login') }}" class="card shadow-sm">
-                <div class="card-body d-grid gap-3">
-                    <div>
-                        <label class="form-label" for="username">Usuario</label>
-                        <input
-                            class="form-control"
-                            id="username"
-                            name="username"
-                            type="text"
-                            autocomplete="username"
-                            required
-                            value="{{ username }}"
-                        >
-                    </div>
-                    <div>
-                        <label class="form-label" for="password">Contraseña</label>
-                        <input
-                            class="form-control"
-                            id="password"
-                            name="password"
-                            type="password"
-                            autocomplete="current-password"
-                            required
-                        >
-                    </div>
-                    <button class="btn btn-primary" type="submit">Entrar</button>
+            <div class="row g-3">
+                <div class="col-12 col-md-6">
+                    <form method="post" action="{{ path('admin_login') }}" class="card shadow-sm h-100">
+                        <div class="card-body d-grid gap-3">
+                            <h2 class="h5 mb-0">Socio</h2>
+                            <p class="text-muted small mb-0">Mail y contraseña de tu cuenta. Si todavía no la creaste, registrate con tu número y el PIN del timbre.</p>
+                            <input type="hidden" name="tipo" value="socio">
+                            <input type="hidden" name="_token" value="{{ token }}">
+                            <div>
+                                <label class="form-label" for="socio-email">Mail</label>
+                                <input class="form-control" id="socio-email" name="username" type="email" autocomplete="username" required {% if tipo == 'socio' %}value="{{ username }}"{% endif %}>
+                            </div>
+                            <div>
+                                <label class="form-label" for="socio-password">Contraseña</label>
+                                <input class="form-control" id="socio-password" name="password" type="password" autocomplete="current-password" required>
+                            </div>
+                            <button class="btn btn-primary" type="submit">Entrar como socio</button>
+                            <div class="d-flex justify-content-between small">
+                                <a href="{{ path('admin_registro') }}">Crear cuenta</a>
+                                <a href="{{ path('admin_recuperar') }}">Olvidé mi clave</a>
+                            </div>
+                        </div>
+                    </form>
                 </div>
-            </form>
+                <div class="col-12 col-md-6">
+                    <form method="post" action="{{ path('admin_login') }}" class="card shadow-sm h-100">
+                        <div class="card-body d-grid gap-3">
+                            <h2 class="h5 mb-0">Personal del club</h2>
+                            <p class="text-muted small mb-0">Mail y contraseña que te dio el club. No se usa el número de socio.</p>
+                            {% if not configured %}
+                                <p class="text-muted small mb-0">Si todavía no hay un administrador, definí <code>ADMIN_USERNAME</code> y <code>ADMIN_PASSWORD</code>.</p>
+                            {% endif %}
+                            <input type="hidden" name="tipo" value="personal">
+                            <input type="hidden" name="_token" value="{{ token }}">
+                            <div>
+                                <label class="form-label" for="staff-email">Mail</label>
+                                <input class="form-control" id="staff-email" name="username" type="text" autocomplete="username" required {% if tipo == 'personal' %}value="{{ username }}"{% endif %}>
+                            </div>
+                            <div>
+                                <label class="form-label" for="staff-password">Contraseña</label>
+                                <input class="form-control" id="staff-password" name="password" type="password" autocomplete="current-password" required>
+                            </div>
+                            <button class="btn btn-primary" type="submit">Entrar como personal</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 {% endblock %}

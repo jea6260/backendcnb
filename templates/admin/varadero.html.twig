@@ -179,13 +179,18 @@
                         <input type="hidden" name="reserva_id" id="reserva_id" value="{{ reserva_activa.id|default('') }}">
 
                         <div class="col-12">
-                            <label class="form-label" for="numero_socio">Socio</label>
-                            <select class="form-select" id="numero_socio" name="numero_socio" required>
-                                <option value="">Seleccionar socio</option>
-                                {% for socio in socios %}
-                                    <option value="{{ socio.id }}" {% if data.numero_socio == socio.id %}selected{% endif %}>{{ socio.label }}</option>
-                                {% endfor %}
-                            </select>
+                            {% if solo_propio %}
+                                <input type="hidden" id="numero_socio" name="numero_socio" value="{{ data.numero_socio }}">
+                                <p class="text-muted mb-0">La reserva queda a tu nombre, solo para tus embarcaciones.</p>
+                            {% else %}
+                                <label class="form-label" for="numero_socio">Socio</label>
+                                <select class="form-select" id="numero_socio" name="numero_socio" required>
+                                    <option value="">Seleccionar socio</option>
+                                    {% for socio in socios %}
+                                        <option value="{{ socio.id }}" {% if data.numero_socio == socio.id %}selected{% endif %}>{{ socio.label }}</option>
+                                    {% endfor %}
+                                </select>
+                            {% endif %}
                         </div>
 
                         <div class="col-12" id="active-reserva-panel" style="{{ reserva_activa ? '' : 'display:none' }}">

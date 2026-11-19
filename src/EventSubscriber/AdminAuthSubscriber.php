@@ -13,7 +13,7 @@ use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 /**
- * El panel /admin y los JSON que usa el planificador solo responden con sesion de rol admin.
+ * El panel /admin exige sesion. Un socio solo llega a lago, timbre, varadero y su cuenta.
  */
 final class AdminAuthSubscriber implements EventSubscriberInterface
 {
@@ -38,14 +38,19 @@ final class AdminAuthSubscriber implements EventSubscriberInterface
 
         $request = $event->getRequest();
         $path = $request->getPathInfo();
-        if (!str_starts_with($path, '/admin') || $path === '/admin/login' || $path === '/admin/logout') {
+        if (!str_starts_with($path, '/admin') || $this->isPublic($path)) {
             return;
         }
 
         $session = $request->getSession();
-        $admin = $this->usuarios->findActiveAdminById($this->sessionAdminId($session));
-        if ($admin !== null) {
-            $session->set(UsuarioAuthService::ADMIN_SESSION_USERNAME, $admin['username']);
+        $user = $this->usuarios->findActivePanelUser($this->sessionAdminId($session));
+        if ($user !== null) {
+            $session->set(UsuarioAuthService::ADMIN_SESSION_USERNAME, $user['username']);
+            $session->set(UsuarioAuthService::ADMIN_SESSION_ROL, $user['rol']);
+            $session->set(UsuarioAuthService::ADMIN_SESSION_SOCIO, $user['numero_socio']);
+            if ($user['rol'] === 'socio' && !$this->socioAllowed($path)) {
+                $event->setResponse(new RedirectResponse($this->urls->generate('admin_dashboard')));
+            }
 
             return;
         }
@@ -78,6 +83,23 @@ final class AdminAuthSubscriber implements EventSubscriberInterface
         }
 
         return is_string($raw) && ctype_digit($raw) ? (int) $raw : 0;
+    }
+
+    private function isPublic(string $path): bool
+    {
+        return $path === '/admin/login'
+            || $path === '/admin/logout'
+            || $path === '/admin/registro'
+            || $path === '/admin/recuperar';
+    }
+
+    private function socioAllowed(string $path): bool
+    {
+        return $path === '/admin'
+            || $path === '/admin/cuenta'
+            || $path === '/admin/timbre'
+            || str_starts_with($path, '/admin/nivel-lago')
+            || str_starts_with($path, '/admin/varadero');
     }
 
     private function isJsonEndpoint(string $path): bool

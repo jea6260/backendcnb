@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Service\ResourceRegistry;
+use App\Service\UsuarioAuthService;
 use App\Service\VaraderoService;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception as DbalException;
@@ -19,6 +20,7 @@ final class AdminController extends AbstractController
         private readonly Connection $connection,
         private readonly ResourceRegistry $registry,
         private readonly VaraderoService $varadero,
+        private readonly UsuarioAuthService $usuarios,
     ) {
     }
 
@@ -29,13 +31,25 @@ final class AdminController extends AbstractController
     }
 
     #[Route('/admin', name: 'admin_dashboard', methods: ['GET'])]
-    public function dashboard(): Response
+    public function dashboard(Request $request): Response
     {
+        if ($request->getSession()->get(UsuarioAuthService::ADMIN_SESSION_ROL) === 'socio') {
+            return $this->render('admin/socio_home.html.twig', [
+                'numero' => $request->getSession()->get(UsuarioAuthService::ADMIN_SESSION_SOCIO),
+            ]);
+        }
+
         $resources = $this->registry->all();
         $stats = [];
 
         foreach ($resources as $name => $definition) {
-            $stats[$name] = (int) $this->connection->fetchOne(sprintf('SELECT COUNT(*) FROM %s', $definition['table']));
+            try {
+                $stats[$name] = (int) $this->connection->fetchOne(
+                    sprintf('SELECT COUNT(*) FROM %s', $definition['table'])
+                );
+            } catch (DbalException) {
+                $stats[$name] = 0;
+            }
         }
 
         return $this->render('admin/dashboard.html.twig', [
@@ -48,6 +62,9 @@ final class AdminController extends AbstractController
     public function varadero(Request $request): Response
     {
         $hoy = new \DateTimeImmutable('today');
+        $session = $request->getSession();
+        $soloPropio = $session->get(UsuarioAuthService::ADMIN_SESSION_ROL) === 'socio';
+        $numeroFijo = (int) $session->get(UsuarioAuthService::ADMIN_SESSION_SOCIO, 0);
         $error = null;
         $data = [
             'numero_socio' => '',
@@ -62,9 +79,19 @@ final class AdminController extends AbstractController
 
         if ($request->isMethod('POST')) {
             $data = array_merge($data, $request->request->all());
+            if ($soloPropio) {
+                $data['numero_socio'] = (string) $numeroFijo;
+                $embarcacionId = (int) ($data['embarcacion_id'] ?? 0);
+                if ($embarcacionId > 0 && !$this->embarcacionDelSocio($numeroFijo, $embarcacionId)) {
+                    $error = 'Esa embarcación no está vinculada a tu número de socio.';
+                    $data['embarcacion_id'] = '';
+                }
+            }
             $accion = (string) ($data['_accion'] ?? 'crear');
 
-            if ($accion === 'observacion') {
+            if ($error !== null) {
+                // La embarcacion no es del socio: no se guarda nada.
+            } elseif ($accion === 'observacion') {
                 $reservaId = (int) ($data['reserva_id'] ?? 0);
                 $numeroSocio = (int) ($data['numero_socio'] ?? 0);
                 $texto = trim((string) ($data['observaciones'] ?? ''));
@@ -98,7 +125,7 @@ final class AdminController extends AbstractController
                 }
             }
         } else {
-            $querySocio = (int) $request->query->get('numero_socio', 0);
+            $querySocio = $soloPropio ? $numeroFijo : (int) $request->query->get('numero_socio', 0);
             if ($querySocio > 0) {
                 $data['numero_socio'] = (string) $querySocio;
             }
@@ -113,7 +140,7 @@ final class AdminController extends AbstractController
         }
         $hasta = $desdeDate->modify('+41 days')->format('Y-m-d');
 
-        $socios = $this->connection->fetchAllAssociative(
+        $socios = $soloPropio ? [] : $this->connection->fetchAllAssociative(
             "SELECT numero_socio AS id,
                     apellido || ', ' || nombre || ' #' || numero_socio AS label
              FROM cnb_app.socios
@@ -148,7 +175,86 @@ final class AdminController extends AbstractController
             'timeline' => $this->varadero->timeline($desde, $hasta),
             'dias_max_reserva' => VaraderoService::DIAS_MAX_RESERVA,
             'dias_max_anio' => VaraderoService::DIAS_MAX_ANIO,
+            'solo_propio' => $soloPropio,
         ]);
+    }
+
+    #[Route('/admin/timbre', name: 'admin_timbre', priority: 30, methods: ['GET', 'POST'])]
+    public function timbre(Request $request): Response
+    {
+        $session = $request->getSession();
+        if ($session->get(UsuarioAuthService::ADMIN_SESSION_ROL) !== 'socio') {
+            return $this->redirectToRoute('admin_dashboard');
+        }
+
+        $numero = (int) $session->get(UsuarioAuthService::ADMIN_SESSION_SOCIO, 0);
+        $aviso = null;
+        if ($request->isMethod('POST') && $numero > 0) {
+            try {
+                $inserted = $this->connection->executeStatement(
+                    "INSERT INTO cnb_app.timbre_cola (numero_socio, relay, tiempo_seg)
+                     SELECT ?, 'Timbre', 3
+                     WHERE NOT EXISTS (
+                       SELECT 1 FROM cnb_app.timbre_cola
+                       WHERE numero_socio = ? AND estado = 'pendiente' AND expira_at > NOW()
+                     )",
+                    [$numero, $numero]
+                );
+                $aviso = $inserted === 1 ? 'enviado' : 'espera';
+            } catch (DbalException) {
+                $aviso = 'error';
+            }
+        }
+
+        return $this->render('admin/timbre.html.twig', [
+            'aviso' => $aviso,
+            'numero' => $numero,
+        ]);
+    }
+
+    #[Route('/admin/personal', name: 'admin_personal', priority: 30, methods: ['POST'])]
+    public function altaPersonal(Request $request): Response
+    {
+        $session = $request->getSession();
+        if ($session->get(UsuarioAuthService::ADMIN_SESSION_ROL) !== 'admin') {
+            return $this->redirectToRoute('admin_dashboard');
+        }
+
+        $email = strtolower(trim((string) $request->request->get('email', '')));
+        $password = (string) $request->request->get('password', '');
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || strlen($password) < 8) {
+            $this->addFlash('danger', 'Mail inválido o clave de menos de 8 caracteres.');
+
+            return $this->redirectToRoute('admin_dashboard');
+        }
+
+        $id = $this->usuarios->ensureUser($email, $this->usuarios->hashPassword($password), 'empleado', null, null, true);
+        $this->addFlash($id === null ? 'danger' : 'success', $id === null
+            ? 'No se pudo crear el personal.'
+            : 'Personal creado. Entra con ese mail y tiene que cambiar la clave.');
+
+        return $this->redirectToRoute('admin_dashboard');
+    }
+
+    private function numeroForzado(Request $request): ?int
+    {
+        $session = $request->getSession();
+        if ($session->get(UsuarioAuthService::ADMIN_SESSION_ROL) !== 'socio') {
+            return null;
+        }
+
+        return (int) $session->get(UsuarioAuthService::ADMIN_SESSION_SOCIO, 0);
+    }
+
+    private function embarcacionDelSocio(int $numeroSocio, int $embarcacionId): bool
+    {
+        foreach ($this->varadero->embarcacionesDeSocio($numeroSocio) as $barco) {
+            if ((int) ($barco['id'] ?? 0) === $embarcacionId) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     #[Route('/admin/nivel-lago', name: 'admin_nivel_lago', priority: 25, methods: ['GET'])]
@@ -208,14 +314,31 @@ final class AdminController extends AbstractController
             return $this->json(['error' => 'Fechas invalidas'], Response::HTTP_BAD_REQUEST);
         }
 
-        return $this->json(['data' => $this->varadero->timeline($desde, $hasta)]);
+        $data = $this->varadero->timeline($desde, $hasta);
+        $propio = $this->numeroForzado($request);
+        if ($propio !== null) {
+            foreach ($data['espacios'] as &$espacio) {
+                foreach ($espacio['reservas'] as &$reserva) {
+                    if ((int) $reserva['numero_socio'] !== $propio) {
+                        $reserva['socio'] = 'Ocupado';
+                        $reserva['embarcacion'] = 'Ocupado';
+                        $reserva['observaciones'] = null;
+                        $reserva['numero_socio'] = 0;
+                        $reserva['embarcacion_id'] = 0;
+                    }
+                }
+            }
+            unset($espacio, $reserva);
+        }
+
+        return $this->json(['data' => $data]);
     }
 
     #[Route('/admin/varadero/disponibilidad', name: 'admin_varadero_disponibilidad', priority: 20, methods: ['GET'])]
     public function varaderoDisponibilidad(Request $request): JsonResponse
     {
         $espacioId = (int) $request->query->get('espacio_id', 0);
-        $numeroSocio = (int) $request->query->get('numero_socio', 0);
+        $numeroSocio = $this->numeroForzado($request) ?? (int) $request->query->get('numero_socio', 0);
         $hoy = new \DateTimeImmutable('today');
         $desde = trim((string) $request->query->get('desde', $hoy->format('Y-m-d')));
         $hasta = trim((string) $request->query->get('hasta', $hoy->modify('+6 months')->format('Y-m-d')));
@@ -240,7 +363,7 @@ final class AdminController extends AbstractController
     #[Route('/admin/varadero/embarcaciones', name: 'admin_varadero_embarcaciones', priority: 20, methods: ['GET'])]
     public function varaderoEmbarcaciones(Request $request): JsonResponse
     {
-        $numeroSocio = (int) $request->query->get('numero_socio', 0);
+        $numeroSocio = $this->numeroForzado($request) ?? (int) $request->query->get('numero_socio', 0);
         if ($numeroSocio < 1) {
             return $this->json(['error' => 'numero_socio es obligatorio'], Response::HTTP_BAD_REQUEST);
         }

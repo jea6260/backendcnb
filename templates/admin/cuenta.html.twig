@@ -5,10 +5,16 @@
 {% block body %}
     <div class="row justify-content-center">
         <div class="col-12 col-md-6 col-lg-5">
-            <h1 class="h3 mb-3">Mi cuenta</h1>
+            <h1 class="h3 mb-1">Mi cuenta</h1>
+            {% if rol == 'socio' and nombre %}
+                <p class="h5 mb-1">{{ nombre }}</p>
+            {% endif %}
+            {% if rol == 'socio' and numero %}
+                <p class="text-muted mb-2">Socio {{ numero }}</p>
+            {% endif %}
             <p class="text-muted">
                 {% if rol == 'socio' %}
-                    Tu ingreso es el número de socio y el PIN. El PIN 1234 no se puede volver a usar.
+                    Tu ingreso al panel es el mail y la contraseña. Acá cambiás el PIN del timbre. El PIN 1234 no se puede volver a usar.
                 {% else %}
                     Cuenta de personal del club. Cambiá el mail y la contraseña. Hace falta la contraseña actual.
                 {% endif %}

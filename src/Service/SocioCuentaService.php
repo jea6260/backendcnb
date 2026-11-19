@@ -107,7 +107,9 @@ final class SocioCuentaService
             return $this->dbError($exception);
         }
         if ($ya) {
-            return 'El socio '.$socio['numero_socio'].' ya creó su usuario. Entrá con el mail o recuperá la contraseña.';
+            $quien = $socio['nombre'] !== '' ? $socio['nombre'].', socio '.$socio['numero_socio'] : 'El socio '.$socio['numero_socio'];
+
+            return $quien.' ya creó su usuario. Entrá con el mail o recuperá la contraseña.';
         }
 
         return [
@@ -157,6 +159,16 @@ final class SocioCuentaService
         }
 
         return $result;
+    }
+
+    /**
+     * Nombre y número si el PIN coincide. No mira si ya tiene mail y clave.
+     *
+     * @return array{numero_socio: int, nombre: string}|string
+     */
+    public function identificar(string $numero, string $pin): array|string
+    {
+        return $this->socioPorNumeroYPin($numero, $pin);
     }
 
     /**

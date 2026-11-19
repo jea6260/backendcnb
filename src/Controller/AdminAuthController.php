@@ -178,6 +178,7 @@ final class AdminAuthController extends AbstractController
         $status = Response::HTTP_OK;
         $numero = '';
         $email = '';
+        $nombre = '';
         if ($request->isMethod('POST')) {
             if (!$this->tokenOk($request)) {
                 $error = 'La sesión venció. Volvé a intentar.';
@@ -188,16 +189,23 @@ final class AdminAuthController extends AbstractController
                 $pin = trim((string) $request->request->get('pin', ''));
                 $password = (string) $request->request->get('password', '');
                 $confirmar = (string) $request->request->get('confirmar', '');
-                if ($password !== $confirmar) {
-                    $error = 'Las contraseñas no coinciden.';
+                $ficha = $this->cuentas->identificar($numero, $pin);
+                if (is_string($ficha)) {
+                    $error = $ficha;
                 } else {
-                    $result = $this->cuentas->recuperar($numero, $pin, $password, $email);
-                    if (is_string($result)) {
-                        $error = $result;
+                    $nombre = $ficha['nombre'];
+                    $numero = (string) $ficha['numero_socio'];
+                    if ($password !== $confirmar) {
+                        $error = 'Las contraseñas no coinciden.';
                     } else {
-                        $this->addFlash('success', 'Clave actualizada. Entrá con el mail.');
+                        $result = $this->cuentas->recuperar($numero, $pin, $password, $email);
+                        if (is_string($result)) {
+                            $error = $result;
+                        } else {
+                            $this->addFlash('success', 'Clave actualizada. Entrá con el mail.');
 
-                        return $this->redirectToRoute('admin_login');
+                            return $this->redirectToRoute('admin_login');
+                        }
                     }
                 }
             }
@@ -210,6 +218,7 @@ final class AdminAuthController extends AbstractController
             'error' => $error,
             'numero' => $numero,
             'email' => $email,
+            'nombre' => $nombre,
             'token' => $this->formToken($request->getSession()),
         ], new Response('', $status));
     }
@@ -264,6 +273,8 @@ final class AdminAuthController extends AbstractController
             'error' => $error,
             'email' => (string) $session->get(UsuarioAuthService::ADMIN_SESSION_USERNAME, $user['username']),
             'rol' => $user['rol'],
+            'nombre' => (string) $session->get(UsuarioAuthService::ADMIN_SESSION_NOMBRE, ''),
+            'numero' => $user['numero_socio'],
             'token' => $this->formToken($session),
         ]);
     }

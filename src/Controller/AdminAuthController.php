@@ -38,129 +38,113 @@ final class AdminAuthController extends AbstractController
         $error = null;
         $username = '';
         $status = Response::HTTP_OK;
-        $cambiarPin = $this->pinPendiente($session);
 
         if ($request->isMethod('POST')) {
             if (!$this->tokenOk($request)) {
                 $error = 'La sesión venció. Volvé a intentar.';
                 $status = Response::HTTP_BAD_REQUEST;
-            } elseif ($request->request->get('accion') === 'cambiar_pin') {
-                $numero = (string) ($cambiarPin['numero'] ?? '');
-                if ($numero === '') {
-                    $error = 'Volvé a ingresar con tu número y el PIN.';
-                    $status = Response::HTTP_BAD_REQUEST;
-                } else {
-                    $result = $this->cuentas->cambiarPinInicial(
-                        $numero,
-                        trim((string) $request->request->get('nuevo', '')),
-                        trim((string) $request->request->get('confirmar', '')),
-                    );
-                    if (is_string($result)) {
-                        $error = $result;
-                        $status = Response::HTTP_UNPROCESSABLE_ENTITY;
-                    } else {
-                        $session->remove('cnb_cambiar_pin');
-
-                        return $this->enter($session, $result);
-                    }
-                }
             } else {
-                $session->remove('cnb_cambiar_pin');
-                $cambiarPin = null;
                 $username = trim((string) $request->request->get('username', ''));
                 $password = (string) $request->request->get('password', '');
-                if (preg_match('/^[1-9][0-9]{0,4}$/', $username) === 1) {
-                    $result = $this->cuentas->ingresarConPin($username, trim($password));
-                    if ($result === 'cambiar_pin') {
-                        $session->set('cnb_cambiar_pin', [
-                            'numero' => (int) $username,
-                            'hasta' => time() + 600,
-                        ]);
-                        $cambiarPin = $this->pinPendiente($session);
-                    } elseif (is_string($result)) {
-                        $error = $result;
+                $error = $this->bootstrapError();
+                if ($error === null) {
+                    $result = $this->usuarios->authenticatePanel($username, $password);
+                    if (is_string($result)) {
+                        $error = 'Mail o contraseña inválidos.';
                         $status = Response::HTTP_UNAUTHORIZED;
                     } else {
                         return $this->enter($session, $result);
                     }
-                } else {
-                    $error = $this->bootstrapError();
-                    if ($error === null) {
-                        $result = $this->usuarios->authenticatePanel($username, $password);
-                        if (is_string($result)) {
-                            $error = 'Usuario o contraseña inválidos. Si no sos socio, pedile acceso al administrador.';
-                            $status = Response::HTTP_UNAUTHORIZED;
-                        } else {
-                            return $this->enter($session, $result);
-                        }
-                    }
                 }
             }
-        } elseif ($cambiarPin === null) {
-            $session->remove('cnb_cambiar_pin');
         }
 
         return $this->render('admin/login.html.twig', [
             'error' => $error,
             'username' => $username,
-            'cambiar_pin' => $cambiarPin !== null,
-            'numero' => $cambiarPin['numero'] ?? null,
             'token' => $this->formToken($session),
         ], new Response('', $status));
-    }
-
-    /**
-     * @return array{numero: int, hasta: int}|null
-     */
-    private function pinPendiente(SessionInterface $session): ?array
-    {
-        $raw = $session->get('cnb_cambiar_pin');
-        if (!is_array($raw) || !isset($raw['numero'], $raw['hasta'])) {
-            return null;
-        }
-        if ((int) $raw['hasta'] < time()) {
-            $session->remove('cnb_cambiar_pin');
-
-            return null;
-        }
-
-        return ['numero' => (int) $raw['numero'], 'hasta' => (int) $raw['hasta']];
     }
 
     #[Route('/registro', name: 'admin_registro', priority: 30, methods: ['GET', 'POST'])]
     public function registro(Request $request): Response
     {
+        $session = $request->getSession();
         $error = null;
         $status = Response::HTTP_OK;
         $numero = '';
         $email = '';
+        $pedido = null;
+        $alta = $this->altaPendiente($session);
+
         if ($request->isMethod('POST')) {
             if (!$this->tokenOk($request)) {
                 $error = 'La sesión venció. Volvé a intentar.';
                 $status = Response::HTTP_BAD_REQUEST;
-            } else {
-                $numero = trim((string) $request->request->get('numeroSocio', ''));
-                $email = trim((string) $request->request->get('email', ''));
-                $pin = trim((string) $request->request->get('pin', ''));
-                $password = (string) $request->request->get('password', '');
-                $confirmar = (string) $request->request->get('confirmar', '');
-                if ($password !== $confirmar) {
-                    $error = 'Las contraseñas no coinciden.';
+            } elseif ($request->request->get('accion') === 'cancelar') {
+                $session->remove('cnb_alta');
+                $alta = null;
+            } elseif ($request->request->get('accion') === 'cuenta') {
+                if ($alta === null) {
+                    $error = 'Volvé a ingresar el número y el PIN.';
+                    $status = Response::HTTP_BAD_REQUEST;
                 } else {
-                    $result = $this->cuentas->registrar($numero, $pin, $email, $password);
-                    if (is_string($result)) {
-                        $error = $result;
+                    $email = trim((string) $request->request->get('email', ''));
+                    $password = (string) $request->request->get('password', '');
+                    $confirmar = (string) $request->request->get('confirmar', '');
+                    if ($password !== $confirmar) {
+                        $error = 'Las contraseñas no coinciden.';
+                        $status = Response::HTTP_UNPROCESSABLE_ENTITY;
                     } else {
-                        $user = $this->usuarios->authenticatePanel($result['username'], $password);
+                        $result = $this->cuentas->registrarConAcceso(
+                            (string) $alta['numero'],
+                            (string) $alta['pin'],
+                            $email,
+                            $password,
+                            trim((string) $request->request->get('pinNuevo', '')),
+                            trim((string) $request->request->get('pinConfirmar', '')),
+                        );
+                        if (is_string($result)) {
+                            $error = $result;
+                            $status = Response::HTTP_UNPROCESSABLE_ENTITY;
+                        } else {
+                            $session->remove('cnb_alta');
+                            $user = $this->usuarios->authenticatePanel($result['username'], $password);
 
-                        return is_string($user)
-                            ? $this->redirectToRoute('admin_login')
-                            : $this->enter($request->getSession(), $user);
+                            return is_string($user)
+                                ? $this->redirectToRoute('admin_login')
+                                : $this->enter($session, $user);
+                        }
                     }
                 }
-            }
-            if ($error !== null && $status === Response::HTTP_OK) {
-                $status = Response::HTTP_UNPROCESSABLE_ENTITY;
+            } elseif ($request->request->get('accion') === 'pedido') {
+                $pedido = $this->pedidoAcceso(
+                    trim((string) $request->request->get('nombre', '')),
+                    trim((string) $request->request->get('email', '')),
+                    trim((string) $request->request->get('mensaje', '')),
+                );
+                if (is_string($pedido)) {
+                    $error = $pedido;
+                    $pedido = null;
+                    $status = Response::HTTP_UNPROCESSABLE_ENTITY;
+                }
+            } else {
+                $numero = trim((string) $request->request->get('numeroSocio', ''));
+                $pin = trim((string) $request->request->get('pin', ''));
+                $result = $this->cuentas->prepararAlta($numero, $pin);
+                if (is_string($result)) {
+                    $error = $result;
+                    $status = Response::HTTP_UNAUTHORIZED;
+                } else {
+                    $session->set('cnb_alta', [
+                        'numero' => $result['numero'],
+                        'pin' => $pin,
+                        'cambiar' => $result['cambiar'],
+                        'nombre' => $result['nombre'],
+                        'hasta' => time() + 600,
+                    ]);
+                    $alta = $this->altaPendiente($session);
+                }
             }
         }
 
@@ -168,8 +152,63 @@ final class AdminAuthController extends AbstractController
             'error' => $error,
             'numero' => $numero,
             'email' => $email,
-            'token' => $this->formToken($request->getSession()),
+            'alta' => $alta,
+            'pedido' => $pedido,
+            'operaciones' => 'operaciones@clubnauticobariloche.com.ar',
+            'token' => $this->formToken($session),
         ], new Response('', $status));
+    }
+
+    /**
+     * @return array{numero: int, pin: string, cambiar: bool, nombre: string}|null
+     */
+    private function altaPendiente(SessionInterface $session): ?array
+    {
+        $raw = $session->get('cnb_alta');
+        if (!is_array($raw) || !isset($raw['numero'], $raw['pin'], $raw['hasta'])) {
+            return null;
+        }
+        if ((int) $raw['hasta'] < time()) {
+            $session->remove('cnb_alta');
+
+            return null;
+        }
+
+        return [
+            'numero' => (int) $raw['numero'],
+            'pin' => (string) $raw['pin'],
+            'cambiar' => (bool) ($raw['cambiar'] ?? false),
+            'nombre' => (string) ($raw['nombre'] ?? ''),
+        ];
+    }
+
+    /**
+     * @return array{href: string, nombre: string, email: string}|string
+     */
+    private function pedidoAcceso(string $nombre, string $email, string $mensaje): array|string
+    {
+        if ($nombre === '' || strlen($nombre) > 80) {
+            return 'Escribí tu nombre.';
+        }
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            return 'El mail no es válido.';
+        }
+        if (strlen($mensaje) > 800) {
+            return 'El mensaje es demasiado largo.';
+        }
+        if ($mensaje === '') {
+            $mensaje = 'Solicito un usuario para el panel del club.';
+        }
+
+        $body = "Nombre: {$nombre}\nMail: {$email}\n\n{$mensaje}\n";
+
+        return [
+            'href' => 'mailto:operaciones@clubnauticobariloche.com.ar?subject='
+                .rawurlencode('Pedido de acceso al panel')
+                .'&body='.rawurlencode($body),
+            'nombre' => $nombre,
+            'email' => $email,
+        ];
     }
 
     #[Route('/recuperar', name: 'admin_recuperar', priority: 30, methods: ['GET', 'POST'])]

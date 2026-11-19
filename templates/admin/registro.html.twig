@@ -1,42 +1,100 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Crear cuenta · CNB{% endblock %}
+{% block title %}Crear usuario · CNB{% endblock %}
 
 {% block body %}
     <div class="row justify-content-center">
         <div class="col-12 col-md-6 col-lg-5">
-            <h1 class="h3 mb-3">Crear cuenta de socio</h1>
-            <p class="text-muted">Para confirmar que sos vos, usamos el número de socio y el PIN del timbre. Después entrás con el mail.</p>
+            <h1 class="h3 mb-3">Crear usuario</h1>
             {% if error %}
                 <div class="alert alert-danger">{{ error }}</div>
             {% endif %}
-            <form method="post" class="card shadow-sm">
-                <div class="card-body d-grid gap-3">
+
+            {% if alta %}
+                <form method="post" class="card shadow-sm mb-3">
+                    <div class="card-body d-grid gap-3">
+                        <p class="mb-0">Socio #{{ alta.numero }}{% if alta.nombre %}, {{ alta.nombre }}{% endif %}. El acceso al panel es un mail y una contraseña.</p>
+                        {% if alta.cambiar %}
+                            <p class="mb-0">El PIN 1234 es el de fábrica. Elegí otro antes de crear el usuario.</p>
+                        {% endif %}
+                        <input type="hidden" name="_token" value="{{ token }}">
+                        <input type="hidden" name="accion" value="cuenta">
+                        {% if alta.cambiar %}
+                            <div>
+                                <label class="form-label" for="pin-nuevo">PIN nuevo</label>
+                                <input class="form-control" id="pin-nuevo" name="pinNuevo" type="password" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" required>
+                            </div>
+                            <div>
+                                <label class="form-label" for="pin-confirmar">Repetir PIN</label>
+                                <input class="form-control" id="pin-confirmar" name="pinConfirmar" type="password" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" required>
+                            </div>
+                        {% endif %}
+                        <div>
+                            <label class="form-label" for="email">Mail</label>
+                            <input class="form-control" id="email" name="email" type="email" required value="{{ email }}">
+                        </div>
+                        <div>
+                            <label class="form-label" for="password">Contraseña (mínimo 8)</label>
+                            <input class="form-control" id="password" name="password" type="password" minlength="8" required>
+                        </div>
+                        <div>
+                            <label class="form-label" for="confirmar">Repetir contraseña</label>
+                            <input class="form-control" id="confirmar" name="confirmar" type="password" minlength="8" required>
+                        </div>
+                        <button class="btn btn-primary" type="submit">Crear usuario</button>
+                    </div>
+                </form>
+                <form method="post">
                     <input type="hidden" name="_token" value="{{ token }}">
-                    <div>
-                        <label class="form-label" for="numero">Número de socio</label>
-                        <input class="form-control" id="numero" name="numeroSocio" inputmode="numeric" required value="{{ numero }}">
+                    <input type="hidden" name="accion" value="cancelar">
+                    <button class="btn btn-link px-0" type="submit">Volver</button>
+                </form>
+            {% else %}
+                <form method="post" class="card shadow-sm mb-4">
+                    <div class="card-body d-grid gap-3">
+                        <h2 class="h5 mb-0">Socio</h2>
+                        <p class="text-muted mb-0">Entrá con tu número y el PIN del timbre. Si el PIN es 1234, lo cambiás en el paso siguiente y elegís mail y contraseña.</p>
+                        <input type="hidden" name="_token" value="{{ token }}">
+                        <input type="hidden" name="accion" value="pin">
+                        <div>
+                            <label class="form-label" for="numero">Número de socio</label>
+                            <input class="form-control" id="numero" name="numeroSocio" inputmode="numeric" required value="{{ numero }}">
+                        </div>
+                        <div>
+                            <label class="form-label" for="pin">PIN</label>
+                            <input class="form-control" id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" required>
+                        </div>
+                        <button class="btn btn-primary" type="submit">Continuar</button>
                     </div>
-                    <div>
-                        <label class="form-label" for="pin">PIN del timbre</label>
-                        <input class="form-control" id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" required>
+                </form>
+
+                <form method="post" id="empleado" class="card shadow-sm">
+                    <div class="card-body d-grid gap-3">
+                        <h2 class="h5 mb-0">No soy socio</h2>
+                        <p class="text-muted mb-0">El pedido se envía a <a href="mailto:{{ operaciones }}">{{ operaciones }}</a> desde tu correo.</p>
+                        {% if pedido %}
+                            <div class="alert alert-success mb-0">Listo el texto. Abrí el correo para enviarlo.</div>
+                            <a class="btn btn-primary" href="{{ pedido.href }}">Enviar a operaciones</a>
+                        {% endif %}
+                        <input type="hidden" name="_token" value="{{ token }}">
+                        <input type="hidden" name="accion" value="pedido">
+                        <div>
+                            <label class="form-label" for="nombre">Nombre</label>
+                            <input class="form-control" id="nombre" name="nombre" required value="{{ pedido.nombre|default('') }}">
+                        </div>
+                        <div>
+                            <label class="form-label" for="mail-pedido">Mail</label>
+                            <input class="form-control" id="mail-pedido" name="email" type="email" required value="{{ pedido.email|default('') }}">
+                        </div>
+                        <div>
+                            <label class="form-label" for="mensaje">Mensaje</label>
+                            <textarea class="form-control" id="mensaje" name="mensaje" rows="3" maxlength="800"></textarea>
+                        </div>
+                        <button class="btn btn-outline-primary" type="submit">Preparar mail</button>
                     </div>
-                    <div>
-                        <label class="form-label" for="email">Mail</label>
-                        <input class="form-control" id="email" name="email" type="email" required value="{{ email }}">
-                    </div>
-                    <div>
-                        <label class="form-label" for="password">Contraseña nueva (mínimo 8)</label>
-                        <input class="form-control" id="password" name="password" type="password" minlength="8" required>
-                    </div>
-                    <div>
-                        <label class="form-label" for="confirmar">Repetir contraseña</label>
-                        <input class="form-control" id="confirmar" name="confirmar" type="password" minlength="8" required>
-                    </div>
-                    <button class="btn btn-primary" type="submit">Crear cuenta</button>
-                    <a class="small" href="{{ path('admin_login') }}">Ya tengo cuenta</a>
-                </div>
-            </form>
+                </form>
+            {% endif %}
+            <a class="small d-inline-block mt-3" href="{{ path('admin_login') }}">Ya tengo usuario</a>
         </div>
     </div>
 {% endblock %}

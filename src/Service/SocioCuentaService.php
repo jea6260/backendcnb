@@ -81,6 +81,79 @@ final class SocioCuentaService
     }
 
     /**
+     * El PIN identifica al socio. El mail y la clave son el acceso al panel.
+     *
+     * @return array{numero: int, cambiar: bool, nombre: string}|string
+     */
+    public function prepararAlta(string $numero, string $pin): array|string
+    {
+        $socio = $this->socioPorNumeroYPin($numero, $pin);
+        if (is_string($socio)) {
+            return $socio;
+        }
+
+        try {
+            $ya = $this->connection->fetchOne(
+                'SELECT id FROM cnb_app.socio_acceso WHERE numero_socio = ?',
+                [$socio['numero_socio']]
+            );
+        } catch (DbalException $exception) {
+            return $this->dbError($exception);
+        }
+        if ($ya) {
+            return 'Ese socio ya tiene usuario. Entrá con el mail o recuperá la contraseña.';
+        }
+
+        return [
+            'numero' => $socio['numero_socio'],
+            'cambiar' => (int) $pin === 1234,
+            'nombre' => $socio['nombre'],
+        ];
+    }
+
+    /**
+     * @return array{id: int, username: string}|string
+     */
+    public function registrarConAcceso(
+        string $numero,
+        string $pin,
+        string $email,
+        string $password,
+        string $pinNuevo = '',
+        string $confirmarPin = '',
+    ): array|string {
+        $socio = $this->socioPorNumeroYPin($numero, $pin);
+        if (is_string($socio)) {
+            return $socio;
+        }
+
+        $cambiaPin = (int) $pin === 1234;
+        if ($cambiaPin) {
+            $error = $this->validarPinNuevo($pinNuevo, $confirmarPin);
+            if ($error !== null) {
+                return $error;
+            }
+            $updated = $this->connection->executeStatement(
+                'UPDATE cnb_app.socios SET pin = ? WHERE numero_socio = ? AND COALESCE(pin, 1234) = 1234',
+                [(int) $pinNuevo, $socio['numero_socio']]
+            );
+            if ($updated !== 1) {
+                return 'No se pudo cambiar el PIN.';
+            }
+        }
+
+        $result = $this->registrar($numero, $cambiaPin ? $pinNuevo : $pin, $email, $password);
+        if ($cambiaPin && is_string($result)) {
+            $this->connection->executeStatement(
+                'UPDATE cnb_app.socios SET pin = 1234 WHERE numero_socio = ? AND pin = ?',
+                [$socio['numero_socio'], (int) $pinNuevo]
+            );
+        }
+
+        return $result;
+    }
+
+    /**
      * @return array{id: int, username: string}|string
      */
     public function recuperar(string $numero, string $pin, string $password, string $email = ''): array|string

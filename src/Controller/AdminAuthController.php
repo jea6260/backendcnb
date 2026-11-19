@@ -318,6 +318,12 @@ final class AdminAuthController extends AbstractController
         $session->set(UsuarioAuthService::ADMIN_SESSION_USERNAME, $user['username']);
         $session->set(UsuarioAuthService::ADMIN_SESSION_ROL, $user['rol']);
         $session->set(UsuarioAuthService::ADMIN_SESSION_SOCIO, $user['numero_socio']);
+        if ($user['rol'] === 'socio') {
+            $session->set(
+                UsuarioAuthService::ADMIN_SESSION_NOMBRE,
+                $this->usuarios->nombreSocio($user['numero_socio']) ?? ''
+            );
+        }
         if ($user['cambiar_clave']) {
             $this->addFlash('success', 'Tenés que cambiar la contraseña.');
 

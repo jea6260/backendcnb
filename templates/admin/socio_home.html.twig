@@ -4,7 +4,10 @@
 
 {% block body %}
     <header class="mb-4">
-        <h1 class="h3 mb-1">Hola{% if numero %}, socio #{{ numero }}{% endif %}</h1>
+        <h1 class="h3 mb-1">Hola{% if nombre %}, {{ nombre }}{% endif %}</h1>
+        {% if numero %}
+            <p class="text-muted mb-2">Socio {{ numero }}</p>
+        {% endif %}
         <p class="text-muted mb-0">Podés ver el nivel del lago, tocar el timbre y pedir turno de varadero para tu embarcación.</p>
     </header>
     <div class="row g-3">

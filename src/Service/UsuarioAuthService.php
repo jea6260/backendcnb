@@ -28,6 +28,8 @@ final class UsuarioAuthService
 
     public const ADMIN_SESSION_SOCIO = 'cnb_numero_socio';
 
+    public const ADMIN_SESSION_NOMBRE = 'cnb_socio_nombre';
+
     public function __construct(private readonly Connection $connection)
     {
     }
@@ -357,6 +359,30 @@ final class UsuarioAuthService
             'rol' => $rol,
             'numero_socio' => $row['numero_socio'] !== null ? (int) $row['numero_socio'] : null,
         ];
+    }
+
+    public function nombreSocio(?int $numero): ?string
+    {
+        if ($numero === null || $numero < 1) {
+            return null;
+        }
+
+        try {
+            $row = $this->connection->fetchAssociative(
+                'SELECT nombre, apellido FROM cnb_app.socios WHERE numero_socio = ?',
+                [$numero]
+            );
+        } catch (DbalException) {
+            return null;
+        }
+
+        if ($row === false) {
+            return null;
+        }
+
+        $nombre = trim((string) ($row['nombre'] ?? '').' '.(string) ($row['apellido'] ?? ''));
+
+        return $nombre !== '' ? $nombre : null;
     }
 
     public function updatePassword(int $usuarioId, string $plain): void

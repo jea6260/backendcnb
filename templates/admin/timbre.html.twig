@@ -9,7 +9,7 @@
                 <div class="card-body text-center">
                     <img src="/images/cnb_logo.jpeg" alt="Club Náutico Bariloche" width="72" height="72">
                     <h1 class="h4 mt-3">Timbre</h1>
-                    <p class="text-muted">Socio #{{ numero }}</p>
+                    <p class="text-muted">{% if nombre %}{{ nombre }} · {% endif %}socio {{ numero }}</p>
                     {% if aviso == 'enviado' %}
                         <div class="alert alert-success">Pedido enviado. El timbre suena en la sede en unos segundos.</div>
                     {% elseif aviso == 'espera' %}

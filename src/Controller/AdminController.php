@@ -36,6 +36,7 @@ final class AdminController extends AbstractController
         if ($request->getSession()->get(UsuarioAuthService::ADMIN_SESSION_ROL) === 'socio') {
             return $this->render('admin/socio_home.html.twig', [
                 'numero' => $request->getSession()->get(UsuarioAuthService::ADMIN_SESSION_SOCIO),
+                'nombre' => (string) $request->getSession()->get(UsuarioAuthService::ADMIN_SESSION_NOMBRE, ''),
             ]);
         }
 
@@ -209,6 +210,7 @@ final class AdminController extends AbstractController
         return $this->render('admin/timbre.html.twig', [
             'aviso' => $aviso,
             'numero' => $numero,
+            'nombre' => (string) $session->get(UsuarioAuthService::ADMIN_SESSION_NOMBRE, ''),
         ]);
     }
 

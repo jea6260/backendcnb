@@ -48,6 +48,14 @@ final class AdminAuthSubscriber implements EventSubscriberInterface
             $session->set(UsuarioAuthService::ADMIN_SESSION_USERNAME, $user['username']);
             $session->set(UsuarioAuthService::ADMIN_SESSION_ROL, $user['rol']);
             $session->set(UsuarioAuthService::ADMIN_SESSION_SOCIO, $user['numero_socio']);
+            if ($user['rol'] === 'socio') {
+                $session->set(
+                    UsuarioAuthService::ADMIN_SESSION_NOMBRE,
+                    $this->usuarios->nombreSocio($user['numero_socio']) ?? ''
+                );
+            } else {
+                $session->remove(UsuarioAuthService::ADMIN_SESSION_NOMBRE);
+            }
             if ($user['rol'] === 'socio' && !$this->socioAllowed($path)) {
                 $event->setResponse(new RedirectResponse($this->urls->generate('admin_dashboard')));
             }

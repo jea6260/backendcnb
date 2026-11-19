@@ -48,7 +48,13 @@
                         {% endif %}
                         <a class="nav-link" href="{{ path('admin_cuenta') }}">Mi cuenta</a>
                         <form method="post" action="{{ path('admin_logout') }}" class="d-flex align-items-center gap-2 ms-2 mb-0">
-                            <span class="nav-link py-0">{{ app.session.get('cnb_admin_username') }}</span>
+                            <span class="nav-link py-0">
+                                {% if app.session.get('cnb_rol') == 'socio' and app.session.get('cnb_socio_nombre') %}
+                                    {{ app.session.get('cnb_socio_nombre') }} · {{ app.session.get('cnb_numero_socio') }}
+                                {% else %}
+                                    {{ app.session.get('cnb_admin_username') }}
+                                {% endif %}
+                            </span>
                             <button class="btn btn-outline-primary btn-sm" type="submit">Salir</button>
                         </form>
                     {% endif %}

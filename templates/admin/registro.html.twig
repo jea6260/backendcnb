@@ -5,7 +5,7 @@
 {% block body %}
     <div class="row justify-content-center">
         <div class="col-12 col-md-6 col-lg-5">
-            <h1 class="h3 mb-3">Crear usuario</h1>
+            <h1 class="h3 mb-3">Crear usuario de socio</h1>
             {% if error %}
                 <div class="alert alert-danger">{{ error }}</div>
             {% endif %}
@@ -50,10 +50,9 @@
                     <button class="btn btn-link px-0" type="submit">Volver</button>
                 </form>
             {% else %}
-                <form method="post" class="card shadow-sm mb-4">
+                <form method="post" class="card shadow-sm">
                     <div class="card-body d-grid gap-3">
-                        <h2 class="h5 mb-0">Socio</h2>
-                        <p class="text-muted mb-0">Entrá con tu número y el PIN del timbre. Si el PIN es 1234, lo cambiás en el paso siguiente y elegís mail y contraseña.</p>
+                        <p class="text-muted mb-0">Solo socios. Entrá con tu número y el PIN del timbre. Si el PIN es 1234, lo cambiás en el paso siguiente y elegís mail y contraseña. El personal del club no se anota acá.</p>
                         <input type="hidden" name="_token" value="{{ token }}">
                         <input type="hidden" name="accion" value="pin">
                         <div>
@@ -65,32 +64,6 @@
                             <input class="form-control" id="pin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" required>
                         </div>
                         <button class="btn btn-primary" type="submit">Continuar</button>
-                    </div>
-                </form>
-
-                <form method="post" id="empleado" class="card shadow-sm">
-                    <div class="card-body d-grid gap-3">
-                        <h2 class="h5 mb-0">No soy socio</h2>
-                        <p class="text-muted mb-0">El pedido se envía a <a href="mailto:{{ operaciones }}">{{ operaciones }}</a> desde tu correo.</p>
-                        {% if pedido %}
-                            <div class="alert alert-success mb-0">Listo el texto. Abrí el correo para enviarlo.</div>
-                            <a class="btn btn-primary" href="{{ pedido.href }}">Enviar a operaciones</a>
-                        {% endif %}
-                        <input type="hidden" name="_token" value="{{ token }}">
-                        <input type="hidden" name="accion" value="pedido">
-                        <div>
-                            <label class="form-label" for="nombre">Nombre</label>
-                            <input class="form-control" id="nombre" name="nombre" required value="{{ pedido.nombre|default('') }}">
-                        </div>
-                        <div>
-                            <label class="form-label" for="mail-pedido">Mail</label>
-                            <input class="form-control" id="mail-pedido" name="email" type="email" required value="{{ pedido.email|default('') }}">
-                        </div>
-                        <div>
-                            <label class="form-label" for="mensaje">Mensaje</label>
-                            <textarea class="form-control" id="mensaje" name="mensaje" rows="3" maxlength="800"></textarea>
-                        </div>
-                        <button class="btn btn-outline-primary" type="submit">Preparar mail</button>
                     </div>
                 </form>
             {% endif %}

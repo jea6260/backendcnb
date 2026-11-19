@@ -94,14 +94,20 @@ final class SocioCuentaService
 
         try {
             $ya = $this->connection->fetchOne(
-                'SELECT id FROM cnb_app.socio_acceso WHERE numero_socio = ?',
-                [$socio['numero_socio']]
+                'SELECT a.id
+                 FROM cnb_app.socio_acceso a
+                 WHERE a.numero_socio = ?
+                 UNION
+                 SELECT u.id
+                 FROM cnb_app.usuarios u
+                 WHERE u.numero_socio = ? AND u.rol = ?',
+                [$socio['numero_socio'], $socio['numero_socio'], 'socio']
             );
         } catch (DbalException $exception) {
             return $this->dbError($exception);
         }
         if ($ya) {
-            return 'Ese socio ya tiene usuario. Entrá con el mail o recuperá la contraseña.';
+            return 'El socio '.$socio['numero_socio'].' ya creó su usuario. Entrá con el mail o recuperá la contraseña.';
         }
 
         return [

@@ -230,10 +230,16 @@ final class AdminController extends AbstractController
             return $this->redirectToRoute('admin_dashboard');
         }
 
+        if ($this->usuarios->findByUsername($email) !== null) {
+            $this->addFlash('danger', 'Ese mail ya tiene usuario.');
+
+            return $this->redirectToRoute('admin_dashboard');
+        }
+
         $id = $this->usuarios->ensureUser($email, $this->usuarios->hashPassword($password), 'empleado', null, null, true);
         $this->addFlash($id === null ? 'danger' : 'success', $id === null
-            ? 'No se pudo crear el personal.'
-            : 'Personal creado. Entra con ese mail y tiene que cambiar la clave.');
+            ? 'No se pudo crear el personal del club.'
+            : 'Personal del club creado. Entra con ese mail y tiene que cambiar la clave.');
 
         return $this->redirectToRoute('admin_dashboard');
     }

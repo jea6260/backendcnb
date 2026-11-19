@@ -17,8 +17,8 @@
     {% if app.session.get('cnb_rol') == 'admin' %}
         <div class="card shadow-sm mb-4">
             <div class="card-body">
-                <h2 class="h5">Alta de personal</h2>
-                <p class="text-muted">No usa número de socio. Entra por el formulario de personal y tiene que cambiar la clave.</p>
+                <h2 class="h5">Personal del club</h2>
+                <p class="text-muted">El personal no se autogestiona ni usa número de socio. Entra con este mail y tiene que cambiar la clave.</p>
                 <form method="post" action="{{ path('admin_personal') }}" class="row g-2 align-items-end">
                     <div class="col-12 col-md-5">
                         <label class="form-label" for="personal-email">Mail</label>
@@ -29,7 +29,7 @@
                         <input class="form-control" id="personal-password" name="password" type="text" minlength="8" required>
                     </div>
                     <div class="col-12 col-md-3">
-                        <button class="btn btn-primary w-100" type="submit">Crear personal</button>
+                        <button class="btn btn-primary w-100" type="submit">Crear personal del club</button>
                     </div>
                 </form>
             </div>

@@ -74,7 +74,6 @@ final class AdminAuthController extends AbstractController
         $status = Response::HTTP_OK;
         $numero = '';
         $email = '';
-        $pedido = null;
         $alta = $this->altaPendiente($session);
 
         if ($request->isMethod('POST')) {
@@ -118,16 +117,8 @@ final class AdminAuthController extends AbstractController
                     }
                 }
             } elseif ($request->request->get('accion') === 'pedido') {
-                $pedido = $this->pedidoAcceso(
-                    trim((string) $request->request->get('nombre', '')),
-                    trim((string) $request->request->get('email', '')),
-                    trim((string) $request->request->get('mensaje', '')),
-                );
-                if (is_string($pedido)) {
-                    $error = $pedido;
-                    $pedido = null;
-                    $status = Response::HTTP_UNPROCESSABLE_ENTITY;
-                }
+                $error = 'El personal del club no crea su usuario. Lo da de alta un administrador.';
+                $status = Response::HTTP_FORBIDDEN;
             } else {
                 $numero = trim((string) $request->request->get('numeroSocio', ''));
                 $pin = trim((string) $request->request->get('pin', ''));
@@ -153,8 +144,6 @@ final class AdminAuthController extends AbstractController
             'numero' => $numero,
             'email' => $email,
             'alta' => $alta,
-            'pedido' => $pedido,
-            'operaciones' => 'operaciones@clubnauticobariloche.com.ar',
             'token' => $this->formToken($session),
         ], new Response('', $status));
     }
@@ -179,35 +168,6 @@ final class AdminAuthController extends AbstractController
             'pin' => (string) $raw['pin'],
             'cambiar' => (bool) ($raw['cambiar'] ?? false),
             'nombre' => (string) ($raw['nombre'] ?? ''),
-        ];
-    }
-
-    /**
-     * @return array{href: string, nombre: string, email: string}|string
-     */
-    private function pedidoAcceso(string $nombre, string $email, string $mensaje): array|string
-    {
-        if ($nombre === '' || strlen($nombre) > 80) {
-            return 'Escribí tu nombre.';
-        }
-        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            return 'El mail no es válido.';
-        }
-        if (strlen($mensaje) > 800) {
-            return 'El mensaje es demasiado largo.';
-        }
-        if ($mensaje === '') {
-            $mensaje = 'Solicito un usuario para el panel del club.';
-        }
-
-        $body = "Nombre: {$nombre}\nMail: {$email}\n\n{$mensaje}\n";
-
-        return [
-            'href' => 'mailto:operaciones@clubnauticobariloche.com.ar?subject='
-                .rawurlencode('Pedido de acceso al panel')
-                .'&body='.rawurlencode($body),
-            'nombre' => $nombre,
-            'email' => $email,
         ];
     }
 

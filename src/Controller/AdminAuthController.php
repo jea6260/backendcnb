@@ -37,46 +37,94 @@ final class AdminAuthController extends AbstractController
 
         $error = null;
         $username = '';
-        $tipo = $request->request->get('tipo') === 'personal' ? 'personal' : 'socio';
         $status = Response::HTTP_OK;
+        $cambiarPin = $this->pinPendiente($session);
 
         if ($request->isMethod('POST')) {
             if (!$this->tokenOk($request)) {
                 $error = 'La sesión venció. Volvé a intentar.';
                 $status = Response::HTTP_BAD_REQUEST;
-            } else {
-                $username = trim((string) $request->request->get('username', ''));
-                $password = (string) $request->request->get('password', '');
-                $error = $tipo === 'personal' ? $this->bootstrapError() : null;
-
-                if ($error === null) {
-                    $result = $this->usuarios->authenticatePanel($username, $password);
+            } elseif ($request->request->get('accion') === 'cambiar_pin') {
+                $numero = (string) ($cambiarPin['numero'] ?? '');
+                if ($numero === '') {
+                    $error = 'Volvé a ingresar con tu número y el PIN.';
+                    $status = Response::HTTP_BAD_REQUEST;
+                } else {
+                    $result = $this->cuentas->cambiarPinInicial(
+                        $numero,
+                        trim((string) $request->request->get('nuevo', '')),
+                        trim((string) $request->request->get('confirmar', '')),
+                    );
                     if (is_string($result)) {
                         $error = $result;
-                    } elseif ($tipo === 'socio' && $result['rol'] !== 'socio') {
-                        $error = 'Esta cuenta es de personal. Entrá en el formulario de personal.';
-                    } elseif ($tipo === 'personal' && $result['rol'] === 'socio') {
-                        $error = 'Esta cuenta es de socio. Entrá con el mail en el formulario de socios.';
+                        $status = Response::HTTP_UNPROCESSABLE_ENTITY;
                     } else {
+                        $session->remove('cnb_cambiar_pin');
+
                         return $this->enter($session, $result);
                     }
                 }
+            } else {
+                $session->remove('cnb_cambiar_pin');
+                $cambiarPin = null;
+                $username = trim((string) $request->request->get('username', ''));
+                $password = (string) $request->request->get('password', '');
+                if (preg_match('/^[1-9][0-9]{0,4}$/', $username) === 1) {
+                    $result = $this->cuentas->ingresarConPin($username, trim($password));
+                    if ($result === 'cambiar_pin') {
+                        $session->set('cnb_cambiar_pin', [
+                            'numero' => (int) $username,
+                            'hasta' => time() + 600,
+                        ]);
+                        $cambiarPin = $this->pinPendiente($session);
+                    } elseif (is_string($result)) {
+                        $error = $result;
+                        $status = Response::HTTP_UNAUTHORIZED;
+                    } else {
+                        return $this->enter($session, $result);
+                    }
+                } else {
+                    $error = $this->bootstrapError();
+                    if ($error === null) {
+                        $result = $this->usuarios->authenticatePanel($username, $password);
+                        if (is_string($result)) {
+                            $error = 'Usuario o contraseña inválidos. Si no sos socio, pedile acceso al administrador.';
+                            $status = Response::HTTP_UNAUTHORIZED;
+                        } else {
+                            return $this->enter($session, $result);
+                        }
+                    }
+                }
             }
-
-            if ($error !== null && $status === Response::HTTP_OK) {
-                $status = str_contains($error, 'Falta la tabla')
-                    ? Response::HTTP_SERVICE_UNAVAILABLE
-                    : Response::HTTP_UNAUTHORIZED;
-            }
+        } elseif ($cambiarPin === null) {
+            $session->remove('cnb_cambiar_pin');
         }
 
         return $this->render('admin/login.html.twig', [
             'error' => $error,
             'username' => $username,
-            'tipo' => $tipo,
+            'cambiar_pin' => $cambiarPin !== null,
+            'numero' => $cambiarPin['numero'] ?? null,
             'token' => $this->formToken($session),
-            'configured' => trim($this->envUsername) !== '' && $this->envPassword !== '',
         ], new Response('', $status));
+    }
+
+    /**
+     * @return array{numero: int, hasta: int}|null
+     */
+    private function pinPendiente(SessionInterface $session): ?array
+    {
+        $raw = $session->get('cnb_cambiar_pin');
+        if (!is_array($raw) || !isset($raw['numero'], $raw['hasta'])) {
+            return null;
+        }
+        if ((int) $raw['hasta'] < time()) {
+            $session->remove('cnb_cambiar_pin');
+
+            return null;
+        }
+
+        return ['numero' => (int) $raw['numero'], 'hasta' => (int) $raw['hasta']];
     }
 
     #[Route('/registro', name: 'admin_registro', priority: 30, methods: ['GET', 'POST'])]
@@ -180,6 +228,20 @@ final class AdminAuthController extends AbstractController
         if ($request->isMethod('POST')) {
             if (!$this->tokenOk($request)) {
                 $error = 'La sesión venció. Volvé a intentar.';
+            } elseif ($user['rol'] === 'socio') {
+                $result = $this->cuentas->cambiarPin(
+                    (int) $user['numero_socio'],
+                    trim((string) $request->request->get('actual', '')),
+                    trim((string) $request->request->get('nuevo', '')),
+                    trim((string) $request->request->get('confirmar', '')),
+                );
+                if (is_string($result)) {
+                    $error = $result;
+                } else {
+                    $this->addFlash('success', 'PIN actualizado.');
+
+                    return $this->redirectToRoute('admin_cuenta');
+                }
             } else {
                 $error = $this->cuentas->cambiarCuenta(
                     $user['id'],

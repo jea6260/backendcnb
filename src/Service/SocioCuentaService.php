@@ -203,7 +203,80 @@ final class SocioCuentaService
     }
 
     /**
-     * @return array{numero_socio: int, nombre: string}|string
+     * El socio entra con número y PIN. 1234 es el PIN de fábrica y no abre el panel.
+     *
+     * @return array{id: int, username: string, rol: string, numero_socio: int, cambiar_clave: bool}|string
+     */
+    public function ingresarConPin(string $numero, string $pin): array|string
+    {
+        $socio = $this->socioPorNumeroYPin($numero, $pin);
+        if (is_string($socio)) {
+            return $socio;
+        }
+        if ((int) $pin === 1234) {
+            return 'cambiar_pin';
+        }
+
+        return $this->abrirSocio($socio, $pin);
+    }
+
+    /**
+     * @return array{id: int, username: string, rol: string, numero_socio: int, cambiar_clave: bool}|string
+     */
+    public function cambiarPinInicial(string $numero, string $nuevo, string $confirmar): array|string
+    {
+        $error = $this->validarPinNuevo($nuevo, $confirmar);
+        if ($error !== null) {
+            return $error;
+        }
+
+        $socio = $this->socioPorNumeroYPin($numero, '1234');
+        if (is_string($socio)) {
+            return 'El PIN ya no es 1234. Entrá de nuevo con el PIN actual.';
+        }
+
+        $updated = $this->connection->executeStatement(
+            'UPDATE cnb_app.socios SET pin = ? WHERE numero_socio = ? AND COALESCE(pin, 1234) = 1234',
+            [(int) $nuevo, $socio['numero_socio']]
+        );
+        if ($updated !== 1) {
+            return 'No se pudo cambiar el PIN.';
+        }
+
+        return $this->abrirSocio($socio, $nuevo);
+    }
+
+    /**
+     * @return array{id: int, username: string, rol: string, numero_socio: int, cambiar_clave: bool}|string
+     */
+    public function cambiarPin(int $numeroSocio, string $actual, string $nuevo, string $confirmar): array|string
+    {
+        $error = $this->validarPinNuevo($nuevo, $confirmar);
+        if ($error !== null) {
+            return $error;
+        }
+        if ($actual === $nuevo) {
+            return 'Elegí un PIN distinto al actual.';
+        }
+
+        $socio = $this->socioPorNumeroYPin((string) $numeroSocio, $actual);
+        if (is_string($socio)) {
+            return $socio;
+        }
+
+        $updated = $this->connection->executeStatement(
+            'UPDATE cnb_app.socios SET pin = ? WHERE numero_socio = ? AND COALESCE(pin, 1234) = ?',
+            [(int) $nuevo, $numeroSocio, (int) $actual]
+        );
+        if ($updated !== 1) {
+            return 'No se pudo cambiar el PIN.';
+        }
+
+        return $this->abrirSocio($socio, $nuevo);
+    }
+
+    /**
+     * @return array{numero_socio: int, nombre: string, email: string}|string
      */
     private function socioPorNumeroYPin(string $numero, string $pin): array|string
     {
@@ -216,7 +289,7 @@ final class SocioCuentaService
 
         try {
             $row = $this->connection->fetchAssociative(
-                'SELECT numero_socio, nombre, apellido, estado, COALESCE(pin, 1234) AS pin
+                'SELECT numero_socio, nombre, apellido, email, estado, COALESCE(pin, 1234) AS pin
                  FROM cnb_app.socios WHERE numero_socio = ?',
                 [(int) $numero]
             );
@@ -231,7 +304,115 @@ final class SocioCuentaService
         return [
             'numero_socio' => (int) $row['numero_socio'],
             'nombre' => trim((string) $row['nombre'].' '.(string) $row['apellido']),
+            'email' => strtolower(trim((string) ($row['email'] ?? ''))),
         ];
+    }
+
+    /**
+     * @param array{numero_socio: int, nombre: string, email: string} $socio
+     * @return array{id: int, username: string, rol: string, numero_socio: int, cambiar_clave: bool}|string
+     */
+    private function abrirSocio(array $socio, string $pin): array|string
+    {
+        $hash = $this->usuarios->hashPassword($pin);
+        $numero = $socio['numero_socio'];
+        try {
+            $existente = $this->connection->fetchAssociative(
+                "SELECT id, username FROM cnb_app.usuarios
+                 WHERE numero_socio = ? AND rol = 'socio'",
+                [$numero]
+            );
+        } catch (DbalException $exception) {
+            return $this->dbError($exception);
+        }
+
+        if ($existente) {
+            $id = (int) $existente['id'];
+            $username = (string) $existente['username'];
+            $this->connection->update('cnb_app.usuarios', [
+                'password_hash' => $hash,
+                'activo' => 'true',
+                'cambiar_clave' => 'false',
+                'updated_at' => date('c'),
+            ], ['id' => $id]);
+        } else {
+            $username = (string) $numero;
+            $id = $this->usuarios->ensureUser($username, $hash, 'socio', $numero, null);
+            if ($id === null) {
+                return 'No se pudo abrir la sesión.';
+            }
+        }
+
+        $marcado = $this->marcarAccesoSocio($numero, $socio['email'], $hash);
+        if ($marcado !== null) {
+            return $marcado;
+        }
+
+        return [
+            'id' => $id,
+            'username' => $username,
+            'rol' => 'socio',
+            'numero_socio' => $numero,
+            'cambiar_clave' => false,
+        ];
+    }
+
+    private function marcarAccesoSocio(int $numero, string $email, string $hash): ?string
+    {
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            $email = 'socio'.$numero.'@acceso.local';
+        }
+
+        try {
+            $existe = $this->connection->fetchAssociative(
+                'SELECT id FROM cnb_app.socio_acceso WHERE numero_socio = ?',
+                [$numero]
+            );
+            if ($existe) {
+                $this->connection->update('cnb_app.socio_acceso', [
+                    'password_hash' => $hash,
+                    'tipo' => 'socio',
+                    'updated_at' => date('c'),
+                ], ['numero_socio' => $numero]);
+
+                return null;
+            }
+
+            $ocupado = $this->connection->fetchOne(
+                'SELECT 1 FROM cnb_app.socio_acceso WHERE LOWER(email) = ?',
+                [$email]
+            );
+            if ($ocupado) {
+                $email = 'socio'.$numero.'@acceso.local';
+            }
+
+            $this->connection->insert('cnb_app.socio_acceso', [
+                'numero_socio' => $numero,
+                'email' => $email,
+                'password_hash' => $hash,
+                'biometric_habilitado' => 'false',
+                'tipo' => 'socio',
+            ]);
+        } catch (DbalException $exception) {
+            return $this->dbError($exception);
+        }
+
+        return null;
+    }
+
+    private function validarPinNuevo(string $nuevo, string $confirmar): ?string
+    {
+        if (preg_match('/^[0-9]{1,6}$/', $nuevo) !== 1) {
+            return 'El PIN nuevo debe tener de 1 a 6 dígitos.';
+        }
+        if ($nuevo !== $confirmar) {
+            return 'Los PIN no coinciden.';
+        }
+        if ($nuevo === '1234' || (int) $nuevo === 1234) {
+            return 'El nuevo PIN no puede ser 1234.';
+        }
+
+        return null;
     }
 
     private function validarClave(string $password): ?string

@@ -7,8 +7,11 @@
         <div class="col-12 col-md-6 col-lg-5">
             <h1 class="h3 mb-3">Mi cuenta</h1>
             <p class="text-muted">
-                {% if rol == 'socio' %}Cuenta de socio.{% else %}Cuenta de personal del club.{% endif %}
-                Cambiá el mail y la contraseña. Hace falta la contraseña actual.
+                {% if rol == 'socio' %}
+                    Tu ingreso es el número de socio y el PIN. El PIN 1234 no se puede volver a usar.
+                {% else %}
+                    Cuenta de personal del club. Cambiá el mail y la contraseña. Hace falta la contraseña actual.
+                {% endif %}
             </p>
             {% if error %}
                 <div class="alert alert-danger">{{ error }}</div>
@@ -16,18 +19,33 @@
             <form method="post" class="card shadow-sm">
                 <div class="card-body d-grid gap-3">
                     <input type="hidden" name="_token" value="{{ token }}">
-                    <div>
-                        <label class="form-label" for="email">Mail</label>
-                        <input class="form-control" id="email" name="email" type="email" required value="{{ email }}">
-                    </div>
-                    <div>
-                        <label class="form-label" for="actual">Contraseña actual</label>
-                        <input class="form-control" id="actual" name="actual" type="password" required>
-                    </div>
-                    <div>
-                        <label class="form-label" for="password">Contraseña nueva (vacío la deja igual)</label>
-                        <input class="form-control" id="password" name="password" type="password" minlength="8">
-                    </div>
+                    {% if rol == 'socio' %}
+                        <div>
+                            <label class="form-label" for="actual">PIN actual</label>
+                            <input class="form-control" id="actual" name="actual" type="password" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" required>
+                        </div>
+                        <div>
+                            <label class="form-label" for="nuevo">PIN nuevo</label>
+                            <input class="form-control" id="nuevo" name="nuevo" type="password" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" required>
+                        </div>
+                        <div>
+                            <label class="form-label" for="confirmar">Repetir PIN</label>
+                            <input class="form-control" id="confirmar" name="confirmar" type="password" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" required>
+                        </div>
+                    {% else %}
+                        <div>
+                            <label class="form-label" for="email">Mail</label>
+                            <input class="form-control" id="email" name="email" type="email" required value="{{ email }}">
+                        </div>
+                        <div>
+                            <label class="form-label" for="actual">Contraseña actual</label>
+                            <input class="form-control" id="actual" name="actual" type="password" required>
+                        </div>
+                        <div>
+                            <label class="form-label" for="password">Contraseña nueva (vacío la deja igual)</label>
+                            <input class="form-control" id="password" name="password" type="password" minlength="8">
+                        </div>
+                    {% endif %}
                     <button class="btn btn-primary" type="submit">Guardar</button>
                 </div>
             </form>

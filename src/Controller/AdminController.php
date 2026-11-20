@@ -202,6 +202,9 @@ final class AdminController extends AbstractController
                     [$numero, $numero]
                 );
                 $aviso = $inserted === 1 ? 'enviado' : 'espera';
+                if (!is_string($session->get('cnb_timbre_desde'))) {
+                    $session->set('cnb_timbre_desde', (string) $this->connection->fetchOne('SELECT NOW()'));
+                }
             } catch (DbalException) {
                 $aviso = 'error';
             }
@@ -211,7 +214,38 @@ final class AdminController extends AbstractController
             'aviso' => $aviso,
             'numero' => $numero,
             'nombre' => (string) $session->get(UsuarioAuthService::ADMIN_SESSION_NOMBRE, ''),
+            'esperando' => is_string($session->get('cnb_timbre_desde')),
         ]);
+    }
+
+    #[Route('/admin/timbre/estado', name: 'admin_timbre_estado', priority: 30, methods: ['GET'])]
+    public function timbreEstado(Request $request): JsonResponse
+    {
+        $session = $request->getSession();
+        $numero = (int) $session->get(UsuarioAuthService::ADMIN_SESSION_SOCIO, 0);
+        $desde = $session->get('cnb_timbre_desde');
+        if ($session->get(UsuarioAuthService::ADMIN_SESSION_ROL) !== 'socio' || !is_string($desde)) {
+            return $this->json(['logged' => false]);
+        }
+
+        try {
+            $id = $this->connection->fetchOne(
+                'SELECT id FROM cnb_app.historial_relays
+                 WHERE numero_socio = ? AND created_at >= ?
+                 ORDER BY id DESC LIMIT 1',
+                [$numero, $desde]
+            );
+        } catch (DbalException) {
+            return $this->json(['logged' => false]);
+        }
+
+        if (!$id) {
+            return $this->json(['logged' => false]);
+        }
+
+        $session->remove('cnb_timbre_desde');
+
+        return $this->json(['logged' => true]);
     }
 
     #[Route('/admin/personal', name: 'admin_personal', priority: 30, methods: ['POST'])]

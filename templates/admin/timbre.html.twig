@@ -17,9 +17,22 @@
                     {% elseif aviso == 'error' %}
                         <div class="alert alert-danger">No se pudo enviar el pedido.</div>
                     {% endif %}
+                    <p class="text-muted" id="espera">{% if esperando %}Esperando el registro del timbre en la sede.{% endif %}</p>
                     <form method="post">
-                        <button class="btn btn-primary btn-lg w-100" type="submit">Timbre</button>
+                        <button class="btn btn-primary btn-lg w-100" type="submit" {% if esperando %}disabled{% endif %}>Timbre</button>
                     </form>
+                    {% if esperando %}
+                        <script>
+                            const timer = setInterval(async () => {
+                                const res = await fetch('{{ path('admin_timbre_estado') }}');
+                                const data = await res.json();
+                                if (data.logged) {
+                                    clearInterval(timer);
+                                    location.href = '{{ path('admin_dashboard') }}';
+                                }
+                            }, 2000);
+                        </script>
+                    {% endif %}
                 </div>
             </div>
         </div>

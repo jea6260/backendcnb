@@ -1,0 +1,122 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Amarras · CNB{% endblock %}
+
+{% block body %}
+    <header class="mb-4">
+        <h1 class="h3 mb-1">Solicitudes de amarra</h1>
+        <p class="text-muted mb-0">
+            {% if socio and nombre %}{{ nombre }} · socio {{ numero }}. {% endif %}
+            Hasta {{ pies }} pies puede ir a tierra. Una eslora mayor va a agua.
+            El puesto sale de los m2 disponibles y de la antigüedad del socio.
+        </p>
+    </header>
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    {% if socio %}
+        <form method="post" class="card shadow-sm mb-4">
+            <div class="card-body row g-3">
+                <input type="hidden" name="accion" value="solicitar">
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="embarcacion">Embarcación</label>
+                    <select class="form-select" id="embarcacion" name="embarcacion_id">
+                        <option value="">Todavía no está en el padrón</option>
+                        {% for barco in barcos %}
+                            <option value="{{ barco.id }}">{{ barco.nombre }}{% if barco.modelo %} · {{ barco.modelo }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="tipo">Tipo, si la embarcación no tiene ficha</label>
+                    <select class="form-select" id="tipo" name="tipo_id">
+                        <option value="">Usar el tipo de la embarcación</option>
+                        {% for tipo in tipos %}
+                            <option value="{{ tipo.id }}">{{ tipo.nombre }}{% if tipo.eslora_m %} · {{ tipo.eslora_m }} m{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label" for="modalidad">Modalidad</label>
+                    <select class="form-select" id="modalidad" name="modalidad" required>
+                        <option value="alquiler">Alquiler</option>
+                        <option value="compra">Compra</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label" for="destino">Destino pedido</label>
+                    <select class="form-select" id="destino" name="destino" required>
+                        <option value="tierra">Tierra</option>
+                        <option value="agua">Agua</option>
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label" for="obs">Notas</label>
+                    <input class="form-control" id="obs" name="observaciones">
+                </div>
+                <div class="col-12">
+                    <button class="btn btn-primary" type="submit">Pedir amarra</button>
+                </div>
+            </div>
+        </form>
+    {% endif %}
+
+    <div class="table-responsive card shadow-sm">
+        <table class="table mb-0 align-middle">
+            <thead>
+                <tr>
+                    <th>Puesto</th>
+                    <th>Socio</th>
+                    <th>Ingreso</th>
+                    <th>Pedido</th>
+                    <th>Tipo</th>
+                    <th>Destino pedido</th>
+                    <th>Según eslora</th>
+                    <th>Destino disponible</th>
+                    <th>m2</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fila in lista %}
+                    <tr>
+                        <td>{{ fila.puesto ?? '—' }}</td>
+                        <td>{{ fila.socio }} · {{ fila.numero_socio }}</td>
+                        <td>{{ fila.fecha_ingreso_socio }}</td>
+                        <td>{{ fila.fecha_solicitud }} · {{ fila.modalidad }}</td>
+                        <td>{{ fila.tipo_nombre ?? fila.embarcacion }}</td>
+                        <td>{{ fila.destino_solicitado }}</td>
+                        <td>{{ fila.destino_por_eslora ?? 'sin medida' }}</td>
+                        <td>{{ fila.destino_disponible ?? '—' }}</td>
+                        <td>{{ fila.m2_necesarios ?? '—' }}{% if fila.m2_disponibles is not null %} / {{ fila.m2_disponibles }}{% endif %}</td>
+                        <td>
+                            {% if socio %}
+                                {{ fila.estado }}
+                            {% else %}
+                                <form method="post" class="d-flex gap-1">
+                                    <input type="hidden" name="accion" value="actualizar">
+                                    <input type="hidden" name="id" value="{{ fila.id }}">
+                                    <select class="form-select form-select-sm" name="destino_disponible">
+                                        <option value="">sin lugar</option>
+                                        <option value="agua" {% if fila.destino_disponible == 'agua' %}selected{% endif %}>agua</option>
+                                        <option value="tierra" {% if fila.destino_disponible == 'tierra' %}selected{% endif %}>tierra</option>
+                                    </select>
+                                    <input class="form-control form-control-sm" name="m2_disponibles" value="{{ fila.m2_disponibles }}" placeholder="m2" style="width:5rem">
+                                    <select class="form-select form-select-sm" name="estado">
+                                        {% for estado in ['en_lista', 'ofrecida', 'asignada', 'rechazada', 'cancelada'] %}
+                                            <option value="{{ estado }}" {% if fila.estado == estado %}selected{% endif %}>{{ estado }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button class="btn btn-sm btn-outline-primary" type="submit">Ok</button>
+                                </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr><td colspan="10" class="text-muted">No hay pedidos.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

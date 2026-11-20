@@ -35,6 +35,7 @@ final class ResourceRegistry
                         'list' => true,
                         'help' => 'Foto del socio para carnet y reconocimiento facial.',
                     ],
+                    'fecha_ingreso' => ['label' => 'Ingreso al club', 'type' => 'date', 'list' => true],
                     'estado' => ['label' => 'Estado', 'type' => 'choice', 'required' => true, 'default' => 'activo', 'list' => true, 'choices' => [
                         'activo' => 'Activo',
                         'suspendido' => 'Suspendido',
@@ -94,6 +95,7 @@ final class ResourceRegistry
                     ],
                     'tipo' => ['label' => 'Tipo', 'type' => 'text', 'required' => true, 'default' => 'velero', 'list' => true],
                     'modelo' => ['label' => 'Modelo', 'type' => 'text', 'list' => true],
+                    'tipo_embarcacion_id' => ['label' => 'Tipo de embarcacion', 'type' => 'relation', 'list' => true, 'relation' => ['table' => 'tipos_embarcacion', 'label' => "nombre || ' (' || COALESCE(eslora_m::text, '?') || ' m)'"]],
                     'nombre' => ['label' => 'Nombre', 'type' => 'text', 'required' => true, 'list' => true],
                     'matricula' => ['label' => 'Matricula', 'type' => 'text', 'list' => true],
                     'eslora_m' => ['label' => 'Eslora (m)', 'type' => 'decimal', 'list' => true],
@@ -114,6 +116,26 @@ final class ResourceRegistry
                     'estado_padron_id' => ['label' => 'Estado padron', 'type' => 'relation', 'list' => true, 'relation' => ['table' => 'estados_padron', 'label' => 'nombre', 'active_only' => true]],
                     'es_cnb' => ['label' => 'Propiedad CNB', 'type' => 'boolean', 'default' => false],
                     'calado_m' => ['label' => 'Calado (m)', 'type' => 'decimal'],
+                ],
+            ],
+            'tipos-embarcacion' => [
+                'table' => 'tipos_embarcacion',
+                'label' => 'Tipos de embarcacion',
+                'singular' => 'Tipo de embarcacion',
+                'description' => 'Ficha de astillero o medidas tomadas del padron. Sirve para amarras y para cada embarcacion.',
+                'fields' => [
+                    'codigo' => ['label' => 'Codigo', 'type' => 'text', 'required' => true, 'list' => true],
+                    'nombre' => ['label' => 'Nombre', 'type' => 'text', 'required' => true, 'list' => true],
+                    'eslora_m' => ['label' => 'Eslora (m)', 'type' => 'decimal', 'list' => true],
+                    'eslora_max_m' => ['label' => 'Eslora maxima (m)', 'type' => 'decimal', 'list' => true],
+                    'manga_m' => ['label' => 'Manga (m)', 'type' => 'decimal', 'list' => true],
+                    'puntal_m' => ['label' => 'Puntal (m)', 'type' => 'decimal'],
+                    'calado_m' => ['label' => 'Calado (m)', 'type' => 'decimal', 'list' => true],
+                    'calado_max_m' => ['label' => 'Calado maximo (m)', 'type' => 'decimal'],
+                    'fuente' => ['label' => 'Fuente', 'type' => 'choice', 'required' => true, 'default' => 'astillero', 'list' => true, 'choices' => [
+                        'astillero' => 'Astillero',
+                        'padron' => 'Padron',
+                    ]],
                 ],
             ],
             'estados-padron' => [

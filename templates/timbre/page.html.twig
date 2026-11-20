@@ -46,6 +46,9 @@
     </div>
 
     {% if mode == 'login' %}
+        {% if ok is defined and ok %}
+            <div class="ok">{{ ok }}</div>
+        {% endif %}
         {% if error is defined and error %}
             <p class="err">{{ error }}</p>
         {% endif %}
@@ -84,7 +87,24 @@
             <input type="hidden" name="_token" value="{{ token }}">
             <button type="submit" id="timbre">Timbre</button>
         </form>
-        <p class="meta">Se anota en la cola y el equipo de la sede lo toma dentro de 15 segundos.</p>
+        <p class="meta" id="espera">{% if esperando is defined and esperando %}Esperando el registro del timbre en la sede.{% else %}Se anota en la cola y el equipo de la sede lo toma dentro de 15 segundos.{% endif %}</p>
+        {% if esperando is defined and esperando %}
+            <script>
+                const espera = document.getElementById('espera');
+                const timer = setInterval(async () => {
+                    const res = await fetch('{{ path('timbre_estado') }}');
+                    const data = await res.json();
+                    if (data.logged) {
+                        clearInterval(timer);
+                        location.href = '{{ path('timbre_home', {listo: 1}) }}';
+                    }
+                }, 2000);
+                setTimeout(() => {
+                    clearInterval(timer);
+                    if (espera) espera.textContent = 'Todavía no está el registro. Podés salir y volver a intentar.';
+                }, 90000);
+            </script>
+        {% endif %}
         <form method="post" action="{{ path('timbre_salir') }}">
             <button class="logout" type="submit">Salir</button>
         </form>

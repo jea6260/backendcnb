@@ -5,6 +5,7 @@ namespace App\Controller;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception as DbalException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -21,6 +22,7 @@ final class TimbreController extends AbstractController
     private const SESSION_PIN = 'timbre_pin';
     private const SESSION_MUST = 'timbre_must_change';
     private const SESSION_TOKEN = 'timbre_token';
+    private const SESSION_ESPERA = 'timbre_espera_desde';
 
     public function __construct(private readonly Connection $connection)
     {
@@ -37,9 +39,18 @@ final class TimbreController extends AbstractController
             return $this->redirectToRoute('timbre_pin');
         }
 
+        if ($request->query->get('listo') === '1') {
+            $session->invalidate();
+
+            return $this->page('login', [
+                'ok' => 'El timbre quedó registrado.',
+            ]);
+        }
+
         return $this->page('timbre', [
             'nombre' => (string) $session->get(self::SESSION_NOMBRE, ''),
             'aviso' => $request->query->get('ok'),
+            'esperando' => is_string($session->get(self::SESSION_ESPERA)) && $session->get(self::SESSION_ESPERA) !== '',
         ]);
     }
 
@@ -175,7 +186,44 @@ final class TimbreController extends AbstractController
             return $this->redirectToRoute('timbre_home', ['ok' => 'error']);
         }
 
+        if ($inserted === 1 || $session->get(self::SESSION_ESPERA) === null) {
+            $desde = $this->connection->fetchOne('SELECT NOW()');
+            if ($inserted === 1 || !is_string($session->get(self::SESSION_ESPERA))) {
+                $session->set(self::SESSION_ESPERA, (string) $desde);
+            }
+        }
+
         return $this->redirectToRoute('timbre_home', ['ok' => $inserted === 1 ? 'enviado' : 'espera']);
+    }
+
+    #[Route('/estado', name: 'timbre_estado', methods: ['GET'])]
+    public function estado(Request $request): JsonResponse
+    {
+        $session = $request->getSession();
+        $numero = $session->get(self::SESSION_SOCIO);
+        $desde = $session->get(self::SESSION_ESPERA);
+        if (!$this->loggedIn($numero) || !is_string($desde) || $desde === '') {
+            return $this->json(['logged' => false]);
+        }
+
+        try {
+            $id = $this->connection->fetchOne(
+                'SELECT id FROM cnb_app.historial_relays
+                 WHERE numero_socio = ? AND created_at >= ?
+                 ORDER BY id DESC LIMIT 1',
+                [(int) $numero, $desde]
+            );
+        } catch (DbalException) {
+            return $this->json(['logged' => false]);
+        }
+
+        if (!$id) {
+            return $this->json(['logged' => false]);
+        }
+
+        $session->remove(self::SESSION_ESPERA);
+
+        return $this->json(['logged' => true]);
     }
 
     #[Route('/salir', name: 'timbre_salir', methods: ['POST'])]

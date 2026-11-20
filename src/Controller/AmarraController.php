@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Service\AmarraMailer;
 use App\Service\AmarraService;
 use App\Service\UsuarioAuthService;
 use App\Service\VaraderoService;
@@ -16,6 +17,7 @@ final class AmarraController extends AbstractController
 {
     public function __construct(
         private readonly AmarraService $amarras,
+        private readonly AmarraMailer $mailer,
         private readonly VaraderoService $varadero,
     ) {
     }
@@ -24,14 +26,16 @@ final class AmarraController extends AbstractController
     public function index(Request $request): Response
     {
         $session = $request->getSession();
-        $socio = $session->get(UsuarioAuthService::ADMIN_SESSION_ROL) === 'socio';
+        $rol = (string) $session->get(UsuarioAuthService::ADMIN_SESSION_ROL, '');
+        $socio = $rol === 'socio';
+        $gestiona = in_array($rol, ['admin', 'empleado'], true);
         $numero = (int) $session->get(UsuarioAuthService::ADMIN_SESSION_SOCIO, 0);
         $error = null;
 
         if ($request->isMethod('POST')) {
             $accion = (string) $request->request->get('accion', 'solicitar');
             try {
-                if ($accion === 'actualizar' && !$socio) {
+                if ($accion === 'actualizar' && $gestiona) {
                     $error = $this->amarras->actualizar(
                         (int) $request->request->get('id', 0),
                         $request->request->get('m2_disponibles'),
@@ -39,7 +43,7 @@ final class AmarraController extends AbstractController
                         (string) $request->request->get('estado', 'en_lista'),
                     );
                     if ($error === null) {
-                        $this->addFlash('success', 'Pedido actualizado.');
+                        $this->addFlash('success', 'Solicitud actualizada.');
 
                         return $this->redirectToRoute('admin_amarras');
                     }
@@ -57,7 +61,14 @@ final class AmarraController extends AbstractController
                     if (!$resultado['ok']) {
                         $error = $resultado['error'];
                     } else {
-                        $this->addFlash('success', 'Pedido de amarra anotado.');
+                        $ficha = $this->amarras->ficha((int) $resultado['id']);
+                        $mail = $ficha ? $this->mailer->enviar($ficha) : 'No se armó el aviso.';
+                        $this->addFlash(
+                            'success',
+                            $mail === null
+                                ? 'Solicitud de amarra anotada. Se avisó a administración.'
+                                : 'Solicitud de amarra anotada. '.$mail
+                        );
 
                         return $this->redirectToRoute('admin_amarras');
                     }
@@ -80,6 +91,7 @@ final class AmarraController extends AbstractController
 
         return $this->render('admin/amarras.html.twig', [
             'socio' => $socio,
+            'gestiona' => $gestiona,
             'numero' => $numero,
             'nombre' => (string) $session->get(UsuarioAuthService::ADMIN_SESSION_NOMBRE, ''),
             'error' => $error,

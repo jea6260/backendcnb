@@ -5,8 +5,8 @@ namespace App\Service;
 use Doctrine\DBAL\Connection;
 
 /**
- * Pedidos de amarra. Hasta 23 pies puede ir a tierra; más eslora va a agua.
- * La lista se ordena por lugar disponible y por antigüedad del socio.
+ * Solicitudes de amarra. Hasta 23 pies puede ir a tierra; más eslora va a agua.
+ * La prioridad sale de los m2 disponibles y de la antigüedad del socio.
  */
 final class AmarraService
 {
@@ -53,11 +53,6 @@ final class AmarraService
                 INNER JOIN cnb_app.socios so ON so.numero_socio = s.numero_socio
                 LEFT JOIN cnb_app.tipos_embarcacion t ON t.id = s.tipo_embarcacion_id
                 LEFT JOIN cnb_app.embarcaciones e ON e.id = s.embarcacion_id";
-        $params = [];
-        if ($soloSocio !== null) {
-            $sql .= ' WHERE s.numero_socio = ?';
-            $params[] = $soloSocio;
-        }
         $sql .= " ORDER BY
                     CASE
                         WHEN s.estado NOT IN ('en_lista', 'ofrecida') THEN 3
@@ -72,19 +67,41 @@ final class AmarraService
                     s.fecha_solicitud,
                     s.id";
 
-        $rows = $this->connection->fetchAllAssociative($sql, $params);
-        $puesto = 0;
+        $rows = $this->connection->fetchAllAssociative($sql);
+        $prioridad = 0;
         foreach ($rows as &$row) {
             $eslora = $row['eslora_max_m'] ?? $row['eslora_m'];
             $row['destino_por_eslora'] = $this->destinoPorEslora($eslora !== null && $eslora !== '' ? (float) $eslora : null);
             if (in_array($row['estado'], ['en_lista', 'ofrecida'], true)) {
-                $row['puesto'] = ++$puesto;
+                $row['prioridad'] = ++$prioridad;
             } else {
-                $row['puesto'] = null;
+                $row['prioridad'] = null;
             }
+        }
+        unset($row);
+
+        if ($soloSocio !== null) {
+            $rows = array_values(array_filter(
+                $rows,
+                static fn (array $row): bool => (int) $row['numero_socio'] === $soloSocio
+            ));
         }
 
         return $rows;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function ficha(int $id): ?array
+    {
+        foreach ($this->lista() as $row) {
+            if ((int) $row['id'] === $id) {
+                return $row;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -176,7 +193,7 @@ final class AmarraService
             'updated_at' => date('c'),
         ], ['id' => $id]);
 
-        return $updated === 1 ? null : 'No se encontró el pedido.';
+        return $updated === 1 ? null : 'No se encontró la solicitud.';
     }
 
     /**

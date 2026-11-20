@@ -854,6 +854,16 @@ final class SocioPortalController extends AbstractController
         }
 
         try {
+            $desde = (string) $this->connection->fetchOne('SELECT NOW()');
+            $this->connection->executeStatement(
+                "INSERT INTO cnb_app.timbre_cola (numero_socio, relay, tiempo_seg)
+                 SELECT ?, 'Timbre', 3
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM cnb_app.timbre_cola
+                   WHERE numero_socio = ? AND estado = 'pendiente' AND expira_at > NOW()
+                 )",
+                [(int) $socio['numero_socio'], (int) $socio['numero_socio']]
+            );
             $relay = $this->relay->trigger('timbre_marineros', [
                 'numero_socio' => $socio['numero_socio'],
                 'distancia_m' => $geo['distance_m'],
@@ -876,12 +886,40 @@ final class SocioPortalController extends AbstractController
                     'resultado' => 'aprobado',
                     'distancia_m' => $geo['distance_m'],
                     'relay' => $relay,
-                    'mensaje' => 'Timbre de marineros activado.',
+                    'desde' => $desde,
+                    'mensaje' => 'Timbre de marineros activado. Esperando el registro.',
                 ],
             ]);
         } catch (DbalException $exception) {
             return $this->dbalError($exception);
         }
+    }
+
+    #[Route('/timbre-marineros/estado', name: 'api_socio_timbre_estado', methods: ['GET'])]
+    public function timbreEstado(Request $request): JsonResponse
+    {
+        $socio = $this->authenticate($request);
+        if ($socio instanceof JsonResponse) {
+            return $socio;
+        }
+
+        $desde = trim((string) $request->query->get('desde', ''));
+        if ($desde === '') {
+            return $this->json(['data' => ['logged' => false]]);
+        }
+
+        try {
+            $id = $this->connection->fetchOne(
+                'SELECT id FROM cnb_app.historial_relays
+                 WHERE numero_socio = ? AND created_at >= ?
+                 ORDER BY id DESC LIMIT 1',
+                [(int) $socio['numero_socio'], $desde]
+            );
+        } catch (DbalException) {
+            return $this->json(['data' => ['logged' => false]]);
+        }
+
+        return $this->json(['data' => ['logged' => (bool) $id]]);
     }
 
     /**

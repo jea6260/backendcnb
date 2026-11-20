@@ -8,7 +8,7 @@
         <p class="text-muted mb-0">
             {% if socio and nombre %}{{ nombre }} · socio {{ numero }}. {% endif %}
             Hasta {{ pies }} pies puede ir a tierra. Una eslora mayor va a agua.
-            El puesto sale de los m2 disponibles y de la antigüedad del socio.
+            La prioridad sale de los m2 disponibles y de la antigüedad del socio.
         </p>
     </header>
     {% if error %}
@@ -45,7 +45,7 @@
                     </select>
                 </div>
                 <div class="col-6 col-md-3">
-                    <label class="form-label" for="destino">Destino pedido</label>
+                    <label class="form-label" for="destino">Destino solicitado</label>
                     <select class="form-select" id="destino" name="destino" required>
                         <option value="tierra">Tierra</option>
                         <option value="agua">Agua</option>
@@ -56,7 +56,7 @@
                     <input class="form-control" id="obs" name="observaciones">
                 </div>
                 <div class="col-12">
-                    <button class="btn btn-primary" type="submit">Pedir amarra</button>
+                    <button class="btn btn-primary" type="submit">Solicitar amarra</button>
                 </div>
             </div>
         </form>
@@ -66,12 +66,12 @@
         <table class="table mb-0 align-middle">
             <thead>
                 <tr>
-                    <th>Puesto</th>
+                    <th>Prioridad</th>
                     <th>Socio</th>
                     <th>Ingreso</th>
-                    <th>Pedido</th>
+                    <th>Solicitud</th>
                     <th>Tipo</th>
-                    <th>Destino pedido</th>
+                    <th>Destino solicitado</th>
                     <th>Según eslora</th>
                     <th>Destino disponible</th>
                     <th>m2</th>
@@ -81,7 +81,7 @@
             <tbody>
                 {% for fila in lista %}
                     <tr>
-                        <td>{{ fila.puesto ?? '—' }}</td>
+                        <td>{{ fila.prioridad ?? '—' }}</td>
                         <td>{{ fila.socio }} · {{ fila.numero_socio }}</td>
                         <td>{{ fila.fecha_ingreso_socio }}</td>
                         <td>{{ fila.fecha_solicitud }} · {{ fila.modalidad }}</td>
@@ -91,9 +91,7 @@
                         <td>{{ fila.destino_disponible ?? '—' }}</td>
                         <td>{{ fila.m2_necesarios ?? '—' }}{% if fila.m2_disponibles is not null %} / {{ fila.m2_disponibles }}{% endif %}</td>
                         <td>
-                            {% if socio %}
-                                {{ fila.estado }}
-                            {% else %}
+                            {% if gestiona %}
                                 <form method="post" class="d-flex gap-1">
                                     <input type="hidden" name="accion" value="actualizar">
                                     <input type="hidden" name="id" value="{{ fila.id }}">
@@ -110,11 +108,13 @@
                                     </select>
                                     <button class="btn btn-sm btn-outline-primary" type="submit">Ok</button>
                                 </form>
+                            {% else %}
+                                {{ fila.estado }}
                             {% endif %}
                         </td>
                     </tr>
                 {% else %}
-                    <tr><td colspan="10" class="text-muted">No hay pedidos.</td></tr>
+                    <tr><td colspan="10" class="text-muted">No hay solicitudes.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

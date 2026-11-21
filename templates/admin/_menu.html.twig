@@ -5,6 +5,7 @@
 
 {% if perfil == 'socio' %}
     {{ m.enlace(path('admin_dashboard'), 'Inicio', ruta == '/admin') }}
+    {{ m.enlace(path('admin_mis_datos'), 'Mis datos', ruta starts with '/admin/mis-datos') }}
     {{ m.enlace(path('admin_nivel_lago'), 'Nivel del lago', ruta starts with '/admin/nivel-lago') }}
     {{ m.enlace(path('admin_timbre'), 'Timbre marineros', ruta starts with '/admin/timbre') }}
     {{ m.enlace(path('admin_varadero'), 'Varadero', ruta starts with '/admin/varadero') }}

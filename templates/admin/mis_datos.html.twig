@@ -1,0 +1,86 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Mis datos · CNB{% endblock %}
+
+{% block body %}
+    <h1 class="h3 mb-1">Mis datos</h1>
+    <p class="text-muted">Socio #{{ socio.numero_socio }}. Podés completar lo que está vacío. Lo que ya figura no se modifica y no se puede borrar.</p>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    {% set etiquetas = {
+        nombre: 'Nombre',
+        apellido: 'Apellido',
+        email: 'Mail',
+        telefono: 'Teléfono',
+        documento: 'Documento',
+        foto_perfil: 'Foto'
+    } %}
+    <form method="post" enctype="multipart/form-data" class="card shadow-sm">
+        <div class="card-body row g-3">
+            <div class="col-12 col-md-6">
+                <label class="form-label">Número de socio</label>
+                <input class="form-control" value="{{ socio.numero_socio }}" readonly>
+            </div>
+            <div class="col-12 col-md-6">
+                <label class="form-label">Estado</label>
+                <input class="form-control" value="{{ socio.estado }}" readonly>
+            </div>
+            {% for campo in completables %}
+                {% set valor = attribute(socio, campo) %}
+                {% set vacio = valor is null or valor|trim == '' %}
+                <div class="col-12 col-md-6">
+                    <label class="form-label" for="{{ campo }}">{{ etiquetas[campo] }}</label>
+                    {% if campo == 'foto_perfil' %}
+                        {% if not vacio %}
+                            <div><img src="{{ valor starts with 'data:' ? valor : 'data:image/jpeg;base64,' ~ valor }}" alt="Foto" class="rounded border" style="width: 96px; height: 128px; object-fit: cover;"></div>
+                        {% else %}
+                            <input class="form-control" id="foto_perfil_file" name="foto_perfil_file" type="file" accept="image/jpeg,image/png,image/webp">
+                        {% endif %}
+                    {% elseif vacio %}
+                        <input class="form-control" id="{{ campo }}" name="{{ campo }}" type="{{ campo == 'email' ? 'email' : 'text' }}">
+                    {% else %}
+                        <input class="form-control" value="{{ valor }}" readonly>
+                    {% endif %}
+                </div>
+            {% endfor %}
+            {% if hay_faltantes %}
+                <div class="col-12">
+                    <button class="btn btn-primary" type="submit">Guardar lo que falta</button>
+                </div>
+            {% else %}
+                <div class="col-12 text-muted">No faltan datos para completar.</div>
+            {% endif %}
+        </div>
+    </form>
+
+    <h2 class="h5 mt-4">Embarcaciones</h2>
+    {% if embarcaciones is empty %}
+        <p class="text-muted">No hay embarcaciones asociadas a este socio.</p>
+    {% else %}
+        <div class="table-responsive card shadow-sm">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Matrícula</th>
+                        <th>Tipo</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for barco in embarcaciones %}
+                        <tr>
+                            <td>{{ barco.nombre }}</td>
+                            <td>{{ barco.matricula }}</td>
+                            <td>{{ barco.tipo }}</td>
+                            <td>{{ barco.estado }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+{% endblock %}

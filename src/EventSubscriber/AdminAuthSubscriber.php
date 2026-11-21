@@ -50,7 +50,7 @@ final class AdminAuthSubscriber implements EventSubscriberInterface
             $session->set(UsuarioAuthService::ADMIN_SESSION_SOCIO, $user['numero_socio']);
             $session->set(UsuarioAuthService::ADMIN_SESSION_PERFIL, $this->usuarios->perfil($user));
             $session->set(UsuarioAuthService::ADMIN_SESSION_NOMBRE, $this->usuarios->nombreVisible($user));
-            if ($user['rol'] === 'socio' && !$this->socioAllowed($path)) {
+            if ($this->denegado($this->usuarios->perfil($user), $path, $request->getMethod())) {
                 $event->setResponse(new RedirectResponse($this->urls->generate('admin_dashboard')));
             }
 
@@ -95,15 +95,80 @@ final class AdminAuthSubscriber implements EventSubscriberInterface
             || $path === '/admin/recuperar';
     }
 
+    private function denegado(string $perfil, string $path, string $method): bool
+    {
+        if (in_array($perfil, ['administrador', 'superuser'], true)) {
+            return false;
+        }
+
+        $recurso = $this->recurso($path);
+        if ($perfil === 'socio') {
+            return !$this->socioAllowed($path);
+        }
+
+        if ($perfil === 'marinero') {
+            if ($recurso !== null) {
+                $permiso = $this->usuarios->permisoRecurso($perfil, $recurso);
+                if (!$permiso['ver']) {
+                    return true;
+                }
+                if (str_contains($path, '/eliminar') || str_contains($path, '/nuevo')) {
+                    return true;
+                }
+                if (str_contains($path, '/editar') && !$permiso['editar']) {
+                    return true;
+                }
+
+                return false;
+            }
+
+            return !$this->marineroLibre($path);
+        }
+
+        if ($perfil === 'operador') {
+            if ($recurso !== null && !$this->usuarios->permisoRecurso($perfil, $recurso)['ver']) {
+                return true;
+            }
+
+            return $path === '/admin/mis-datos';
+        }
+
+        return true;
+    }
+
     private function socioAllowed(string $path): bool
     {
         return $path === '/admin'
             || $path === '/admin/cuenta'
+            || $path === '/admin/mis-datos'
             || $path === '/admin/timbre'
             || str_starts_with($path, '/admin/timbre/')
             || $path === '/admin/amarras'
             || str_starts_with($path, '/admin/nivel-lago')
             || str_starts_with($path, '/admin/varadero');
+    }
+
+    private function marineroLibre(string $path): bool
+    {
+        return $path === '/admin'
+            || $path === '/admin/cuenta'
+            || str_starts_with($path, '/admin/nivel-lago')
+            || str_starts_with($path, '/admin/varadero');
+    }
+
+    private function recurso(string $path): ?string
+    {
+        if (!preg_match('#^/admin/([a-z0-9-]+)#', $path, $coincide)) {
+            return null;
+        }
+
+        $nombre = $coincide[1];
+        $reservados = [
+            'cuenta', 'timbre', 'varadero', 'amarras', 'nivel-lago', 'personal',
+            'historial-timbre', 'mis-datos', 'login', 'logout', 'registro', 'recuperar',
+        ];
+
+        return in_array($nombre, $reservados, true) ? null : $nombre;
     }
 
     private function isJsonEndpoint(string $path): bool

@@ -27,8 +27,9 @@ final class AmarraController extends AbstractController
     {
         $session = $request->getSession();
         $rol = (string) $session->get(UsuarioAuthService::ADMIN_SESSION_ROL, '');
+        $perfil = (string) $session->get(UsuarioAuthService::ADMIN_SESSION_PERFIL, '');
         $socio = $rol === 'socio';
-        $gestiona = in_array($rol, ['admin', 'empleado'], true);
+        $gestiona = in_array($perfil, ['administrador', 'superuser', 'operador'], true);
         $numero = (int) $session->get(UsuarioAuthService::ADMIN_SESSION_SOCIO, 0);
         $error = null;
 

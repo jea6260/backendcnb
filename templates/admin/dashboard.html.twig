@@ -71,7 +71,7 @@
                         <a class="btn btn-primary" href="{{ path('admin_resource_index', {resource: name}) }}">Abrir</a>
                         {% if name == 'reservas-varadero' %}
                             <a class="btn btn-outline-primary" href="{{ path('admin_varadero') }}">Planificar</a>
-                        {% else %}
+                        {% elseif permisos[name].crear %}
                             <a class="btn btn-outline-primary" href="{{ path('admin_resource_new', {resource: name}) }}">Nuevo</a>
                         {% endif %}
                     </div>

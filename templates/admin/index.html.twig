@@ -12,7 +12,7 @@
             <a class="btn btn-outline-secondary" href="{{ path('admin_dashboard') }}">Volver</a>
             {% if resource == 'reservas-varadero' %}
                 <a class="btn btn-primary" href="{{ path('admin_varadero') }}">Planificador</a>
-            {% else %}
+            {% elseif puede_crear %}
                 <a class="btn btn-primary" href="{{ path('admin_resource_new', {resource: resource}) }}">Nuevo</a>
             {% endif %}
         </div>
@@ -121,10 +121,17 @@
                                 </td>
                             {% endfor %}
                             <td class="text-end">
-                                <a class="btn btn-sm btn-outline-primary" href="{{ path('admin_resource_edit', {resource: resource, id: attribute(row, primary_key)}) }}">Editar</a>
-                                <form method="post" action="{{ path('admin_resource_delete', {resource: resource, id: attribute(row, primary_key)}) }}" class="d-inline" onsubmit="return confirm('Eliminar registro?');">
-                                    <button class="btn btn-sm btn-outline-danger" type="submit">Eliminar</button>
-                                </form>
+                                {% if puede_editar %}
+                                    <a class="btn btn-sm btn-outline-primary" href="{{ path('admin_resource_edit', {resource: resource, id: attribute(row, primary_key)}) }}">Editar</a>
+                                {% endif %}
+                                {% if puede_borrar %}
+                                    <form method="post" action="{{ path('admin_resource_delete', {resource: resource, id: attribute(row, primary_key)}) }}" class="d-inline" onsubmit="return confirm('Eliminar registro?');">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Eliminar</button>
+                                    </form>
+                                {% endif %}
+                                {% if not puede_editar and not puede_borrar %}
+                                    <span class="text-muted small">Solo lectura</span>
+                                {% endif %}
                             </td>
                         </tr>
                     {% else %}

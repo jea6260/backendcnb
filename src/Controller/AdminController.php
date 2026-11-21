@@ -40,7 +40,13 @@ final class AdminController extends AbstractController
             ]);
         }
 
-        $resources = $this->registry->all();
+        $perfil = (string) $request->getSession()->get(UsuarioAuthService::ADMIN_SESSION_PERFIL, '');
+        $resources = [];
+        foreach ($this->registry->all() as $name => $definition) {
+            if ($this->usuarios->permisoRecurso($perfil, $name)['ver']) {
+                $resources[$name] = $definition;
+            }
+        }
         $stats = [];
 
         foreach ($resources as $name => $definition) {
@@ -53,9 +59,15 @@ final class AdminController extends AbstractController
             }
         }
 
+        $permisos = [];
+        foreach (array_keys($resources) as $name) {
+            $permisos[$name] = $this->usuarios->permisoRecurso($perfil, $name);
+        }
+
         return $this->render('admin/dashboard.html.twig', [
             'resources' => $resources,
             'stats' => $stats,
+            'permisos' => $permisos,
         ]);
     }
 
@@ -337,6 +349,42 @@ final class AdminController extends AbstractController
         return $this->redirectToRoute('admin_dashboard');
     }
 
+    /**
+     * @return array{ver: bool, editar: bool, borrar: bool, crear: bool}|RedirectResponse
+     */
+    private function permiso(Request $request, string $resource): array|RedirectResponse
+    {
+        $perfil = (string) $request->getSession()->get(UsuarioAuthService::ADMIN_SESSION_PERFIL, '');
+        $permiso = $this->usuarios->permisoRecurso($perfil, $resource);
+        if (!$permiso['ver']) {
+            return $this->redirectToRoute('admin_dashboard');
+        }
+
+        return $permiso;
+    }
+
+    private function datoVacio(mixed $valor): bool
+    {
+        return $valor === null || trim((string) $valor) === '';
+    }
+
+    private function fotoSubida(Request $request): ?string
+    {
+        $file = $request->files->get('foto_perfil_file');
+        if ($file === null || !$file->isValid() || !str_starts_with((string) $file->getMimeType(), 'image/')) {
+            return null;
+        }
+        if ($file->getSize() > 4 * 1024 * 1024) {
+            return null;
+        }
+        $binary = @file_get_contents($file->getPathname());
+        if ($binary === false || $binary === '') {
+            return null;
+        }
+
+        return 'data:'.$file->getMimeType().';base64,'.base64_encode($binary);
+    }
+
     private function sessionUserId(\Symfony\Component\HttpFoundation\Session\SessionInterface $session): int
     {
         $raw = $session->get(UsuarioAuthService::ADMIN_SESSION_ID);
@@ -489,9 +537,83 @@ final class AdminController extends AbstractController
         ]);
     }
 
+    #[Route('/admin/mis-datos', name: 'admin_mis_datos', priority: 30, methods: ['GET', 'POST'])]
+    public function misDatos(Request $request): Response
+    {
+        $session = $request->getSession();
+        if ($session->get(UsuarioAuthService::ADMIN_SESSION_PERFIL) !== 'socio') {
+            return $this->redirectToRoute('admin_dashboard');
+        }
+
+        $numero = (int) $session->get(UsuarioAuthService::ADMIN_SESSION_SOCIO, 0);
+        $row = $this->connection->fetchAssociative(
+            'SELECT numero_socio, nombre, apellido, email, telefono, documento, foto_perfil, fecha_ingreso, estado
+             FROM cnb_app.socios WHERE numero_socio = ?',
+            [$numero]
+        );
+        if (!$row) {
+            throw $this->createNotFoundException();
+        }
+
+        $completables = ['nombre', 'apellido', 'email', 'telefono', 'documento', 'foto_perfil'];
+        $error = null;
+        if ($request->isMethod('POST')) {
+            $cambios = [];
+            foreach ($completables as $campo) {
+                if (!$this->datoVacio($row[$campo] ?? null)) {
+                    continue;
+                }
+                $nuevo = trim((string) $request->request->get($campo, ''));
+                if ($campo === 'foto_perfil') {
+                    $nuevo = $this->fotoSubida($request) ?? $nuevo;
+                }
+                if ($nuevo !== '') {
+                    $cambios[$campo] = $nuevo;
+                }
+            }
+            if ($cambios === []) {
+                $error = 'No hay datos vacíos para completar.';
+            } else {
+                $this->connection->update('cnb_app.socios', $cambios, ['numero_socio' => $numero]);
+                $this->addFlash('success', 'Se guardaron los datos que faltaban.');
+
+                return $this->redirectToRoute('admin_mis_datos');
+            }
+        }
+
+        $hayFaltantes = false;
+        foreach ($completables as $campo) {
+            if ($this->datoVacio($row[$campo] ?? null)) {
+                $hayFaltantes = true;
+                break;
+            }
+        }
+
+        $embarcaciones = $this->connection->fetchAllAssociative(
+            'SELECT DISTINCT e.nombre, e.matricula, e.tipo, e.estado
+             FROM cnb_app.embarcaciones e
+             LEFT JOIN cnb_app.socio_embarcacion se ON se.embarcacion_id = e.id
+             WHERE e.numero_socio = ? OR se.numero_socio = ?
+             ORDER BY e.nombre',
+            [$numero, $numero]
+        );
+
+        return $this->render('admin/mis_datos.html.twig', [
+            'socio' => $row,
+            'completables' => $completables,
+            'hay_faltantes' => $hayFaltantes,
+            'embarcaciones' => $embarcaciones,
+            'error' => $error,
+        ]);
+    }
+
     #[Route('/admin/{resource}', name: 'admin_resource_index', methods: ['GET'])]
     public function index(string $resource, Request $request): Response
     {
+        $permiso = $this->permiso($request, $resource);
+        if ($permiso instanceof RedirectResponse) {
+            return $permiso;
+        }
         $definition = $this->registry->get($resource);
         $fields = $this->registry->listFields($definition);
         $pk = $this->registry->primaryKey($definition);
@@ -519,6 +641,9 @@ final class AdminController extends AbstractController
             'sort' => in_array($sort, $this->registry->listableColumns($definition), true) ? $sort : $pk,
             'dir' => strtolower($dir) === 'asc' ? 'asc' : 'desc',
             'filters' => $filters,
+            'puede_editar' => $permiso['editar'],
+            'puede_borrar' => $permiso['borrar'],
+            'puede_crear' => $permiso['crear'],
         ]);
     }
 
@@ -527,6 +652,13 @@ final class AdminController extends AbstractController
     {
         if ($resource === 'reservas-varadero') {
             return $this->redirectToRoute('admin_varadero');
+        }
+
+        $permiso = $this->permiso($request, $resource);
+        if ($permiso instanceof RedirectResponse || !$permiso['crear']) {
+            return $permiso instanceof RedirectResponse
+                ? $permiso
+                : $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
         }
 
         $definition = $this->registry->get($resource);
@@ -567,6 +699,13 @@ final class AdminController extends AbstractController
     #[Route('/admin/{resource}/{id}/editar', name: 'admin_resource_edit', requirements: ['id' => '[^/]+'], methods: ['GET', 'POST'])]
     public function edit(string $resource, string $id, Request $request): Response
     {
+        $permiso = $this->permiso($request, $resource);
+        if ($permiso instanceof RedirectResponse || !$permiso['editar']) {
+            return $permiso instanceof RedirectResponse
+                ? $permiso
+                : $this->redirectToRoute('admin_dashboard');
+        }
+
         $definition = $this->registry->get($resource);
         $pk = $this->registry->primaryKey($definition);
         $row = $this->connection->fetchAssociative(
@@ -632,8 +771,15 @@ final class AdminController extends AbstractController
     }
 
     #[Route('/admin/{resource}/{id}/eliminar', name: 'admin_resource_delete', requirements: ['id' => '[^/]+'], methods: ['POST'])]
-    public function delete(string $resource, string $id): RedirectResponse
+    public function delete(string $resource, string $id, Request $request): RedirectResponse
     {
+        $permiso = $this->permiso($request, $resource);
+        if ($permiso instanceof RedirectResponse || !$permiso['borrar']) {
+            $this->addFlash('danger', 'No podés borrar este registro.');
+
+            return $this->redirectToRoute('admin_dashboard');
+        }
+
         $definition = $this->registry->get($resource);
         $pk = $this->registry->primaryKey($definition);
 

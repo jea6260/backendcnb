@@ -308,6 +308,37 @@ final class UsuarioAuthService
     }
 
     /**
+     * @return array{ver: bool, editar: bool, borrar: bool, crear: bool}
+     */
+    public function permisoRecurso(string $perfil, string $resource): array
+    {
+        $config = ['tipos-embarcacion', 'estados-padron', 'ubicaciones', 'espacios-varadero', 'marineros', 'vehiculos', 'camaras'];
+        $tareas = ['tareas', 'tarea-asignaciones', 'avances-tarea'];
+        $verMarinero = ['embarcaciones', 'reservas-varadero', 'novedades', 'tareas', 'tarea-asignaciones', 'avances-tarea'];
+
+        if (in_array($perfil, ['administrador', 'superuser'], true)) {
+            return ['ver' => true, 'editar' => true, 'borrar' => true, 'crear' => true];
+        }
+        if ($perfil === 'operador') {
+            $ok = !in_array($resource, $config, true);
+
+            return ['ver' => $ok, 'editar' => $ok, 'borrar' => $ok, 'crear' => $ok];
+        }
+        if ($perfil === 'marinero') {
+            $esTarea = in_array($resource, $tareas, true);
+
+            return [
+                'ver' => in_array($resource, $verMarinero, true),
+                'editar' => $esTarea,
+                'borrar' => false,
+                'crear' => false,
+            ];
+        }
+
+        return ['ver' => false, 'editar' => false, 'borrar' => false, 'crear' => false];
+    }
+
+    /**
      * Alta de personal del club. El marinero tiene que existir ya en el padron, con el mismo mail.
      *
      * @return string|null mensaje de error

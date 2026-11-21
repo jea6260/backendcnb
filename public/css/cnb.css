@@ -179,6 +179,10 @@ main.container-fluid {
     flex-direction: column;
     background: var(--cnb-navy);
     color: #fff;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow: hidden;
 }
 
 .cnb-shell.is-collapsed .cnb-menu {
@@ -188,9 +192,10 @@ main.container-fluid {
 .cnb-menu-nav {
     display: flex;
     flex-direction: column;
-    padding: 1rem 0.75rem;
+    padding: 0.25rem 0.75rem 1rem;
     gap: 0.25rem;
     overflow: auto;
+    flex: 1 1 auto;
 }
 
 .cnb-menu-group {
@@ -293,15 +298,17 @@ main.container-fluid {
 }
 
 .cnb-menu-salir {
-    margin-top: auto;
-    padding: 0.75rem;
+    padding: 0.85rem 0.75rem 0.15rem;
 }
 
-.cnb-menu-salir .btn-outline-primary {
-    --bs-btn-color: var(--cnb-gold-soft);
-    --bs-btn-border-color: var(--cnb-gold);
-    --bs-btn-hover-color: var(--cnb-navy);
-    --bs-btn-hover-bg: var(--cnb-gold-soft);
+.cnb-menu-salir .cnb-menu-link {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
 }
 
 .cnb-main {
@@ -342,6 +349,24 @@ main.container-fluid {
 
 .cnb-top .cnb-brand {
     margin-right: auto;
+}
+
+.cnb-user {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+}
+
+.cnb-salir {
+    border: 0;
+    background: transparent;
+    color: var(--cnb-navy);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-decoration: underline;
+    padding: 0;
+    cursor: pointer;
 }
 
 .cnb-profile {
@@ -386,6 +411,7 @@ main.container-fluid {
         position: fixed;
         z-index: 30;
         inset: 0 auto 0 0;
+        height: 100vh;
     }
 
     .cnb-top .cnb-brand-title {

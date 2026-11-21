@@ -1,0 +1,42 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Timbre por socio - CNB{% endblock %}
+
+{% block body %}
+    <h1 class="h3 mb-1">Timbre por socio</h1>
+    <p class="text-muted">Cada vez que un socio acciona el timbre y el uso queda en el historial.</p>
+
+    {% if grupos is empty %}
+        <div class="card shadow-sm">
+            <div class="card-body text-muted mb-0">Todavía no hay accionamientos registrados.</div>
+        </div>
+    {% else %}
+        {% for grupo in grupos %}
+            <section class="card shadow-sm mb-3">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">{{ grupo.socio }} <span class="text-muted">#{{ grupo.numero_socio }}</span></h2>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Cuándo</th>
+                                    <th>Relay</th>
+                                    <th>Segundos</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for uso in grupo.usos %}
+                                    <tr>
+                                        <td>{{ uso.created_at|slice(0, 16)|replace({'T': ' '}) }}</td>
+                                        <td>{{ uso.relay }}</td>
+                                        <td>{{ uso.tiempo_seg }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        {% endfor %}
+    {% endif %}
+{% endblock %}

@@ -193,12 +193,96 @@ main.container-fluid {
     overflow: auto;
 }
 
+.cnb-menu-group {
+    margin: 0.15rem 0;
+}
+
+.cnb-menu-group > summary {
+    list-style: none;
+    cursor: pointer;
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 0.78rem;
+    padding: 0.7rem 0.85rem;
+    border-radius: 10px;
+}
+
+.cnb-menu-group > summary::-webkit-details-marker {
+    display: none;
+}
+
+.cnb-menu-group > summary::before {
+    content: "▸";
+    display: inline-block;
+    width: 1rem;
+    color: var(--cnb-gold);
+}
+
+.cnb-menu-group[open] > summary::before {
+    content: "▾";
+}
+
+.cnb-menu-sub {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0 0 0.35rem 0.85rem;
+}
+
+.cnb-menu-sub .cnb-menu-group > summary {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.95rem;
+    color: var(--cnb-gold-soft);
+}
+
 .cnb-menu-link {
     color: var(--cnb-gold-soft);
     text-decoration: none;
     font-weight: 600;
-    padding: 0.65rem 0.85rem;
+    padding: 0.55rem 0.85rem;
     border-radius: 10px;
+}
+
+.cnb-estado {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: #e7e2d6;
+    color: var(--cnb-navy);
+}
+
+.cnb-estado-pendiente,
+.cnb-estado-asignada {
+    background: #f3e2b8;
+    color: #6b4e12;
+}
+
+.cnb-estado-confirmada,
+.cnb-estado-en_progreso,
+.cnb-estado-en_curso {
+    background: #d6e6f5;
+    color: #0c4a6e;
+}
+
+.cnb-estado-finalizada {
+    background: #d8ead8;
+    color: #1b5e20;
+}
+
+.cnb-estado-bloqueada {
+    background: #f8d7c4;
+    color: #8a3b12;
+}
+
+.cnb-estado-cancelada,
+.cnb-estado-rechazada {
+    background: #f3d6d6;
+    color: #8a1c1c;
 }
 
 .cnb-menu-link:hover,

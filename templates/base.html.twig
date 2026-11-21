@@ -34,33 +34,7 @@
             <div class="cnb-shell" id="cnb-shell">
                 <aside class="cnb-menu" id="cnb-menu">
                     <nav class="cnb-menu-nav">
-                        {% if perfil == 'socio' %}
-                            {% set items = [
-                                {href: path('admin_dashboard'), label: 'Inicio', match: '/admin'},
-                                {href: path('admin_nivel_lago'), label: 'Nivel del lago', match: '/admin/nivel-lago'},
-                                {href: path('admin_timbre'), label: 'Timbre marineros', match: '/admin/timbre'},
-                                {href: path('admin_varadero'), label: 'Varadero', match: '/admin/varadero'},
-                                {href: path('admin_amarras'), label: 'Amarras', match: '/admin/amarras'}
-                            ] %}
-                        {% else %}
-                            {% set items = [
-                                {href: path('admin_dashboard'), label: 'Inicio', match: '/admin'},
-                                {href: path('admin_nivel_lago'), label: 'Nivel del lago', match: '/admin/nivel-lago'},
-                                {href: path('admin_varadero'), label: 'Varadero', match: '/admin/varadero'},
-                                {href: path('admin_amarras'), label: 'Amarras', match: '/admin/amarras'},
-                                {href: path('admin_resource_index', {resource: 'socios'}), label: 'Socios', match: '/admin/socios'},
-                                {href: path('admin_resource_index', {resource: 'embarcaciones'}), label: 'Embarcaciones', match: '/admin/embarcaciones'},
-                                {href: path('admin_resource_index', {resource: 'marineros'}), label: 'Marineros', match: '/admin/marineros'},
-                                {href: path('admin_resource_index', {resource: 'tareas'}), label: 'Tareas', match: '/admin/tareas'}
-                            ] %}
-                            {% if perfil in ['administrador', 'superuser', 'operador'] %}
-                                {% set items = [{href: path('admin_dashboard'), label: 'Inicio', match: '/admin'}, {href: path('admin_dashboard') ~ '#personal', label: 'Personal', match: ''}]|merge(items|slice(1)) %}
-                            {% endif %}
-                        {% endif %}
-                        {% for item in items %}
-                            {% set activo = item.match != '' and (item.match == '/admin' ? ruta == '/admin' : ruta starts with item.match) %}
-                            <a class="cnb-menu-link{{ activo ? ' is-active' : '' }}" href="{{ item.href }}">{{ item.label }}</a>
-                        {% endfor %}
+                        {% include 'admin/_menu.html.twig' with {perfil: perfil, ruta: ruta} %}
                     </nav>
                     <form method="post" action="{{ path('admin_logout') }}" class="cnb-menu-salir">
                         <button class="btn btn-outline-primary w-100" type="submit">Salir</button>

@@ -1,0 +1,98 @@
+{% macro enlace(href, label, activo) %}
+    <a class="cnb-menu-link{{ activo ? ' is-active' : '' }}" href="{{ href }}">{{ label }}</a>
+{% endmacro %}
+{% import _self as m %}
+
+{% if perfil == 'socio' %}
+    {{ m.enlace(path('admin_dashboard'), 'Inicio', ruta == '/admin') }}
+    {{ m.enlace(path('admin_nivel_lago'), 'Nivel del lago', ruta starts with '/admin/nivel-lago') }}
+    {{ m.enlace(path('admin_timbre'), 'Timbre marineros', ruta starts with '/admin/timbre') }}
+    {{ m.enlace(path('admin_varadero'), 'Varadero', ruta starts with '/admin/varadero') }}
+    {{ m.enlace(path('admin_amarras'), 'Amarras', ruta starts with '/admin/amarras') }}
+{% else %}
+    {{ m.enlace(path('admin_dashboard'), 'Inicio', ruta == '/admin') }}
+
+    {% set ver_config = perfil in ['administrador', 'superuser'] %}
+    {% set ver_admin = perfil in ['administrador', 'superuser', 'operador'] %}
+    {% set vista = app.request.query.get('vista') %}
+
+    {% if ver_config %}
+        {% set config_abierto = ruta starts with '/admin/tipos-embarcacion'
+            or ruta starts with '/admin/estados-padron'
+            or ruta starts with '/admin/ubicaciones'
+            or ruta starts with '/admin/espacios-varadero'
+            or ruta starts with '/admin/marineros'
+            or ruta starts with '/admin/vehiculos'
+            or ruta starts with '/admin/camaras' %}
+        <details class="cnb-menu-group" {{ config_abierto ? 'open' : '' }}>
+            <summary>Configuración</summary>
+            <div class="cnb-menu-sub">
+                {{ m.enlace(path('admin_resource_index', {resource: 'tipos-embarcacion'}), 'Tipos de embarcación', ruta starts with '/admin/tipos-embarcacion') }}
+                {{ m.enlace(path('admin_resource_index', {resource: 'estados-padron'}), 'Estados del padrón', ruta starts with '/admin/estados-padron') }}
+                {{ m.enlace(path('admin_resource_index', {resource: 'ubicaciones'}), 'Ubicaciones', ruta starts with '/admin/ubicaciones') }}
+                {{ m.enlace(path('admin_resource_index', {resource: 'espacios-varadero'}), 'Espacios de varadero', ruta starts with '/admin/espacios-varadero') }}
+                {{ m.enlace(path('admin_resource_index', {resource: 'marineros'}), 'Padrón de marineros', ruta starts with '/admin/marineros') }}
+                {{ m.enlace(path('admin_resource_index', {resource: 'vehiculos'}), 'Vehículos', ruta starts with '/admin/vehiculos') }}
+                {{ m.enlace(path('admin_resource_index', {resource: 'camaras'}), 'Cámaras', ruta starts with '/admin/camaras') }}
+            </div>
+        </details>
+    {% endif %}
+
+    {% set embarcaciones_abierto = ruta starts with '/admin/embarcaciones'
+        or (ruta starts with '/admin/reservas-varadero' and vista == 'embarcacion')
+        or (ruta starts with '/admin/tareas' and vista == 'embarcacion')
+        or ruta starts with '/admin/varadero' %}
+    {% set tareas_abierto = (ruta starts with '/admin/tareas' and vista != 'embarcacion')
+        or ruta starts with '/admin/tarea-asignaciones'
+        or ruta starts with '/admin/avances-tarea'
+        or ruta starts with '/admin/novedades' %}
+    <details class="cnb-menu-group" {{ embarcaciones_abierto or tareas_abierto or ruta starts with '/admin/nivel-lago' ? 'open' : '' }}>
+        <summary>Operaciones</summary>
+        <div class="cnb-menu-sub">
+            <details class="cnb-menu-group" {{ embarcaciones_abierto ? 'open' : '' }}>
+                <summary>Embarcaciones</summary>
+                <div class="cnb-menu-sub">
+                    {{ m.enlace(path('admin_resource_index', {resource: 'embarcaciones'}), 'Listado general', ruta starts with '/admin/embarcaciones') }}
+                    {{ m.enlace(path('admin_resource_index', {resource: 'reservas-varadero', vista: 'embarcacion'}), 'Historial de varadero', ruta starts with '/admin/reservas-varadero' and vista == 'embarcacion') }}
+                    {{ m.enlace(path('admin_resource_index', {resource: 'tareas', vista: 'embarcacion'}), 'Tareas de la embarcación', ruta starts with '/admin/tareas' and vista == 'embarcacion') }}
+                    {{ m.enlace(path('admin_varadero'), 'Planificador', ruta starts with '/admin/varadero') }}
+                </div>
+            </details>
+            <details class="cnb-menu-group" {{ tareas_abierto ? 'open' : '' }}>
+                <summary>Tareas</summary>
+                <div class="cnb-menu-sub">
+                    {{ m.enlace(path('admin_resource_index', {resource: 'tareas', vista: 'padron'}), 'Padrón de tareas', ruta starts with '/admin/tareas' and vista == 'padron') }}
+                    {{ m.enlace(path('admin_resource_index', {resource: 'tareas', vista: 'estado'}), 'Listado por estado', ruta starts with '/admin/tareas' and vista == 'estado') }}
+                    {{ m.enlace(path('admin_resource_index', {resource: 'tarea-asignaciones'}), 'Asignación', ruta starts with '/admin/tarea-asignaciones') }}
+                    {{ m.enlace(path('admin_resource_index', {resource: 'avances-tarea'}), 'Avances', ruta starts with '/admin/avances-tarea') }}
+                    {{ m.enlace(path('admin_resource_index', {resource: 'novedades'}), 'Novedades', ruta starts with '/admin/novedades') }}
+                </div>
+            </details>
+            {{ m.enlace(path('admin_nivel_lago'), 'Nivel del lago', ruta starts with '/admin/nivel-lago') }}
+        </div>
+    </details>
+
+    {% if ver_admin %}
+        {% set socios_abierto = ruta starts with '/admin/socios'
+            or ruta starts with '/admin/socio-embarcacion'
+            or ruta starts with '/admin/historial-timbre'
+            or (ruta starts with '/admin/reservas-varadero' and vista == 'socio')
+            or ruta starts with '/admin/amarras' %}
+        <details class="cnb-menu-group" {{ socios_abierto ? 'open' : '' }}>
+            <summary>Administración</summary>
+            <div class="cnb-menu-sub">
+                <details class="cnb-menu-group" {{ socios_abierto ? 'open' : '' }}>
+                    <summary>Socios</summary>
+                    <div class="cnb-menu-sub">
+                        {{ m.enlace(path('admin_resource_index', {resource: 'socios'}), 'Listado', ruta starts with '/admin/socios') }}
+                        {{ m.enlace(path('admin_resource_index', {resource: 'socio-embarcacion'}), 'Embarcaciones por socio', ruta starts with '/admin/socio-embarcacion') }}
+                        {{ m.enlace(path('admin_historial_timbre'), 'Timbre por socio', ruta starts with '/admin/historial-timbre') }}
+                        {{ m.enlace(path('admin_resource_index', {resource: 'reservas-varadero', vista: 'socio'}), 'Pedidos de varadero', ruta starts with '/admin/reservas-varadero' and vista == 'socio') }}
+                        {{ m.enlace(path('admin_amarras'), 'Solicitudes de amarra', ruta starts with '/admin/amarras') }}
+                    </div>
+                </details>
+                {{ m.enlace(path('admin_dashboard') ~ '#personal', 'Personal', false) }}
+            </div>
+        </details>
+    {% endif %}
+{% endif %}

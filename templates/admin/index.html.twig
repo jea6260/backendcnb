@@ -110,7 +110,11 @@
                                     {% elseif field.type == 'relation' %}
                                         {{ attribute(row, name ~ '_label')|default(value) }}
                                     {% elseif field.type == 'choice' and field.choices[value] is defined %}
-                                        {{ field.choices[value] }}
+                                        {% if name == 'estado' %}
+                                            <span class="cnb-estado cnb-estado-{{ value }}">{{ field.choices[value] }}</span>
+                                        {% else %}
+                                            {{ field.choices[value] }}
+                                        {% endif %}
                                     {% else %}
                                         {{ value }}
                                     {% endif %}

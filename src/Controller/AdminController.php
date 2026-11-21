@@ -219,6 +219,36 @@ final class AdminController extends AbstractController
         ]);
     }
 
+    #[Route('/admin/historial-timbre', name: 'admin_historial_timbre', priority: 30, methods: ['GET'])]
+    public function historialTimbre(): Response
+    {
+        $filas = $this->connection->fetchAllAssociative(
+            "SELECT h.id, h.numero_socio, h.relay, h.tiempo_seg, h.created_at,
+                    s.apellido, s.nombre
+             FROM cnb_app.historial_relays h
+             LEFT JOIN cnb_app.socios s ON s.numero_socio = h.numero_socio
+             ORDER BY s.apellido ASC NULLS LAST, s.nombre ASC, h.created_at DESC
+             LIMIT 400"
+        );
+        $grupos = [];
+        foreach ($filas as $fila) {
+            $numero = (int) $fila['numero_socio'];
+            if (!isset($grupos[$numero])) {
+                $nombre = trim((string) ($fila['apellido'] ?? '') . ', ' . (string) ($fila['nombre'] ?? ''), ' ,');
+                $grupos[$numero] = [
+                    'numero_socio' => $numero,
+                    'socio' => $nombre !== '' ? $nombre : 'Socio #' . $numero,
+                    'usos' => [],
+                ];
+            }
+            $grupos[$numero]['usos'][] = $fila;
+        }
+
+        return $this->render('admin/historial_timbre.html.twig', [
+            'grupos' => array_values($grupos),
+        ]);
+    }
+
     #[Route('/admin/timbre', name: 'admin_timbre', priority: 30, methods: ['GET', 'POST'])]
     public function timbre(Request $request): Response
     {

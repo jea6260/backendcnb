@@ -1,5 +1,7 @@
 {% extends 'base.html.twig' %}
 
+{% block layout %}guest{% endblock %}
+
 {% block title %}Ingreso · Club Náutico Bariloche{% endblock %}
 
 {% block body %}
@@ -25,7 +27,7 @@
                         <a href="{{ path('admin_registro') }}">Crear usuario</a>
                         <a href="{{ path('admin_recuperar') }}">Recuperar contraseña</a>
                     </div>
-                    <p class="text-muted small mb-0">Crear usuario es solo para socios. El personal del club entra con el usuario que le da el administrador.</p>
+                    <p class="text-muted small mb-0">Crear usuario es solo para socios. El personal entra con la cuenta que le da administración u operaciones. Esa cuenta sirve en la web y en la app.</p>
                 </div>
             </form>
         </div>

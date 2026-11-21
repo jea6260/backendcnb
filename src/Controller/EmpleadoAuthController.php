@@ -118,6 +118,7 @@ final class EmpleadoAuthController extends AbstractController
         }
 
         try {
+            $this->usuarios->ensureSuperuser();
             $row = $this->cuentaParaIngreso($user, $pass);
             if (is_string($row)) {
                 $status = $row === 'Socio no activo' ? Response::HTTP_FORBIDDEN : Response::HTTP_UNAUTHORIZED;
@@ -163,6 +164,39 @@ final class EmpleadoAuthController extends AbstractController
         } catch (DbalException $exception) {
             return $this->dbalError($exception);
         }
+    }
+
+    #[Route('/usuarios', name: 'api_empleado_usuarios', methods: ['POST'])]
+    public function altaUsuario(Request $request): JsonResponse
+    {
+        $actor = $this->authenticate($request);
+        if ($actor instanceof JsonResponse) {
+            return $actor;
+        }
+        if (!in_array($actor['perfil'] ?? '', ['administrador', 'superuser', 'operador'], true)) {
+            return $this->json(['error' => 'Solo administración u operaciones pueden dar de alta personal.'], Response::HTTP_FORBIDDEN);
+        }
+
+        $data = $this->jsonBody($request);
+        $email = (string) ($data['user'] ?? $data['email'] ?? '');
+        $pass = (string) ($data['pass'] ?? $data['password'] ?? '');
+        $perfil = (string) ($data['perfil'] ?? '');
+
+        try {
+            $error = $this->usuarios->crearPersonal($email, $pass, $perfil, (string) $actor['perfil']);
+        } catch (DbalException $exception) {
+            return $this->dbalError($exception);
+        }
+        if ($error !== null) {
+            $status = str_contains($error, 'ya tiene usuario') ? Response::HTTP_CONFLICT : Response::HTTP_BAD_REQUEST;
+            if (str_contains($error, 'padron')) {
+                $status = Response::HTTP_NOT_FOUND;
+            }
+
+            return $this->json(['error' => $error], $status);
+        }
+
+        return $this->json(['status' => 'OK', 'data' => ['email' => strtolower(trim($email)), 'perfil' => $perfil]], Response::HTTP_CREATED);
     }
 
     #[Route('/me', name: 'api_empleado_me', methods: ['GET'])]
@@ -303,6 +337,11 @@ final class EmpleadoAuthController extends AbstractController
             'nombre' => $marinero['nombre'] ?? null,
             'apellido' => $marinero['apellido'] ?? null,
             'email' => $marinero['email'] ?? $username,
+            'perfil' => $this->usuarios->perfil([
+                'username' => $username,
+                'rol' => $rol,
+                'marinero_id' => $marinero['id'] ?? null,
+            ]),
         ];
     }
 

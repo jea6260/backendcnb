@@ -204,7 +204,7 @@ final class ResourceRegistry
                 'table' => 'reservas_varadero',
                 'label' => 'Reservas de varadero',
                 'singular' => 'Reserva de varadero',
-                'description' => 'Reservas de limpieza y mantenimiento con cupo anual por socio.',
+                'description' => 'El socio pide (pendiente). El operador confirma. El marinero marca la entrada y la vuelta a la amarra, que libera el lugar. Cupo de 15 dias por año.',
                 'fields' => [
                     'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
                     'embarcacion_id' => ['label' => 'Embarcacion', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'embarcaciones', 'label' => "nombre || COALESCE(' - ' || matricula, '')"]],

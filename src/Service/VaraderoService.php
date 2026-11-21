@@ -9,7 +9,7 @@ final class VaraderoService
     public const DIAS_MAX_RESERVA = 15;
     public const DIAS_MAX_ANIO = 15;
     public const ESTADOS_ACTIVOS = ['pendiente', 'confirmada', 'en_curso'];
-    public const ESTADOS_BLOQUEAN_NUEVA = ['pendiente', 'en_curso'];
+    public const ESTADOS_BLOQUEAN_NUEVA = ['pendiente', 'confirmada', 'en_curso'];
     public const ESTADOS_CUPO = ['pendiente', 'confirmada', 'en_curso', 'finalizada'];
 
     public function __construct(
@@ -137,7 +137,7 @@ final class VaraderoService
              LEFT JOIN cnb_app.embarcaciones e ON e.id = r.embarcacion_id
              LEFT JOIN cnb_app.espacios_varadero sp ON sp.id = r.espacio_id
              WHERE r.numero_socio = ?
-               AND r.estado IN ('pendiente', 'en_curso')
+               AND r.estado IN ('pendiente', 'confirmada', 'en_curso')
              ORDER BY
                CASE r.estado WHEN 'en_curso' THEN 0 ELSE 1 END,
                r.fecha_inicio DESC
@@ -195,7 +195,7 @@ final class VaraderoService
         if (!in_array((string) $reserva['estado'], self::ESTADOS_BLOQUEAN_NUEVA, true)) {
             return [
                 'ok' => false,
-                'error' => 'Solo se pueden agregar observaciones a reservas pendientes o en curso',
+                'error' => 'Solo se pueden agregar observaciones a una reserva abierta',
                 'status' => 400,
             ];
         }
@@ -513,11 +513,100 @@ final class VaraderoService
                 'espacio_id' => $espacioId,
                 'fecha_inicio' => $inicio->format('Y-m-d'),
                 'fecha_fin' => $fin->format('Y-m-d'),
-                'estado' => $data['estado'] ?? 'pendiente',
+                'estado' => $excludeReservaId === null ? 'pendiente' : (string) ($data['estado'] ?? 'pendiente'),
                 'motivo' => $data['motivo'] ?? 'limpieza_mantenimiento',
                 'observaciones' => ($data['observaciones'] ?? '') !== '' ? $data['observaciones'] : null,
             ],
         ];
+    }
+
+    /**
+     * Paso siguiente que este perfil puede dar. El socio no avanza estados.
+     *
+     * @return array{estado: string, etiqueta: string}|null
+     */
+    public function accionDisponible(string $perfil, string $estado): ?array
+    {
+        $pasos = [
+            'pendiente' => ['confirmada', 'Confirmar y habilitar', ['operador', 'administrador', 'superuser']],
+            'confirmada' => ['en_curso', 'Barco en varadero', ['marinero', 'administrador', 'superuser']],
+            'en_curso' => ['finalizada', 'Volvió a la amarra', ['marinero', 'administrador', 'superuser']],
+        ];
+        $paso = $pasos[$estado] ?? null;
+        if ($paso === null || !in_array($perfil, $paso[2], true)) {
+            return null;
+        }
+
+        return ['estado' => $paso[0], 'etiqueta' => $paso[1]];
+    }
+
+    /**
+     * @return array{ok: true, data: array<string, mixed>}|array{ok: false, error: string, status: int}
+     */
+    public function transicionar(int $id, string $hacia, string $perfil): array
+    {
+        $hacia = trim($hacia);
+        $reserva = $this->connection->fetchAssociative(
+            'SELECT id, estado, observaciones FROM cnb_app.reservas_varadero WHERE id = ?',
+            [$id]
+        );
+        if (!$reserva) {
+            return ['ok' => false, 'error' => 'Reserva no encontrada', 'status' => 404];
+        }
+
+        $desde = (string) $reserva['estado'];
+        if (!$this->permiteTransicion($perfil, $desde, $hacia)) {
+            return ['ok' => false, 'error' => 'Ese paso no corresponde a este usuario.', 'status' => 403];
+        }
+
+        $notas = [
+            'confirmada' => 'El operador confirmo la reserva y habilito el lugar.',
+            'rechazada' => 'El operador rechazo la solicitud. El socio puede pedir otra.',
+            'cancelada' => 'Reserva cancelada. El lugar quedo libre.',
+            'en_curso' => 'El marinero informo que el barco ya esta en varadero.',
+            'finalizada' => 'El marinero informo que el barco volvio a su amarra. El lugar quedo libre.',
+        ];
+        $stamp = (new \DateTimeImmutable('now', new \DateTimeZone('America/Argentina/Buenos_Aires')))
+            ->format('Y-m-d H:i');
+        $previa = trim((string) ($reserva['observaciones'] ?? ''));
+        $linea = sprintf('[%s] %s', $stamp, $notas[$hacia] ?? $hacia);
+        $nueva = $previa === '' ? $linea : $previa . "\n" . $linea;
+
+        $this->connection->update('cnb_app.reservas_varadero', [
+            'estado' => $hacia,
+            'observaciones' => $nueva,
+        ], ['id' => $id]);
+
+        $actualizada = $this->connection->fetchAssociative(
+            "SELECT r.*, e.nombre AS embarcacion_nombre, e.matricula AS embarcacion_matricula,
+                    sp.codigo AS espacio_codigo
+             FROM cnb_app.reservas_varadero r
+             LEFT JOIN cnb_app.embarcaciones e ON e.id = r.embarcacion_id
+             LEFT JOIN cnb_app.espacios_varadero sp ON sp.id = r.espacio_id
+             WHERE r.id = ?",
+            [$id]
+        );
+
+        return ['ok' => true, 'data' => $this->normalizeReserva($actualizada ?: [])];
+    }
+
+    private function permiteTransicion(string $perfil, string $desde, string $hacia): bool
+    {
+        $permitidas = [
+            'pendiente' => [
+                'confirmada' => ['operador', 'administrador', 'superuser'],
+                'rechazada' => ['operador', 'administrador', 'superuser'],
+            ],
+            'confirmada' => [
+                'en_curso' => ['marinero', 'administrador', 'superuser'],
+                'cancelada' => ['operador', 'administrador', 'superuser'],
+            ],
+            'en_curso' => [
+                'finalizada' => ['marinero', 'administrador', 'superuser'],
+            ],
+        ];
+
+        return in_array($perfil, $permitidas[$desde][$hacia] ?? [], true);
     }
 
     /**

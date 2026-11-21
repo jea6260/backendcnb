@@ -14,22 +14,32 @@
         </div>
     </header>
 
-    {% if app.session.get('cnb_rol') == 'admin' %}
-        <div class="card shadow-sm mb-4">
+    {% set perfil = app.session.get('cnb_perfil') %}
+    {% if perfil in ['administrador', 'superuser', 'operador'] %}
+        <div class="card shadow-sm mb-4" id="personal">
             <div class="card-body">
                 <h2 class="h5">Personal del club</h2>
-                <p class="text-muted">El personal no se autogestiona ni usa número de socio. Entra con este mail y tiene que cambiar la clave.</p>
+                <p class="text-muted">La cuenta sirve en la web y en la app. El marinero tiene que existir antes en el padrón, con este mismo mail. Solo administración puede crear un operador.</p>
                 <form method="post" action="{{ path('admin_personal') }}" class="row g-2 align-items-end">
-                    <div class="col-12 col-md-5">
+                    <div class="col-12 col-md-4">
                         <label class="form-label" for="personal-email">Mail</label>
                         <input class="form-control" id="personal-email" name="email" type="email" required>
                     </div>
-                    <div class="col-12 col-md-4">
+                    <div class="col-12 col-md-3">
                         <label class="form-label" for="personal-password">Clave inicial</label>
                         <input class="form-control" id="personal-password" name="password" type="text" minlength="8" required>
                     </div>
                     <div class="col-12 col-md-3">
-                        <button class="btn btn-primary w-100" type="submit">Crear personal del club</button>
+                        <label class="form-label" for="personal-perfil">Perfil</label>
+                        <select class="form-select" id="personal-perfil" name="perfil">
+                            {% if perfil in ['administrador', 'superuser'] %}
+                                <option value="operador">Operador</option>
+                            {% endif %}
+                            <option value="marinero">Marinero</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2">
+                        <button class="btn btn-primary w-100" type="submit">Crear</button>
                     </div>
                 </form>
             </div>

@@ -18,6 +18,10 @@ final class UsuarioAuthService
     /** Igual que lexik_jwt_authentication.token_ttl de ovmovil v3. */
     public const TOKEN_TTL_SECONDS = 86400;
 
+    public const SUPERUSER_USERNAME = 'clubnauticobariloche';
+
+    private const SUPERUSER_PASSWORD = 'ClubNautico@2026';
+
     public const ADMIN_SESSION_ID = 'cnb_admin_id';
 
     public const ADMIN_SESSION_USERNAME = 'cnb_admin_username';
@@ -29,6 +33,8 @@ final class UsuarioAuthService
     public const ADMIN_SESSION_SOCIO = 'cnb_numero_socio';
 
     public const ADMIN_SESSION_NOMBRE = 'cnb_socio_nombre';
+
+    public const ADMIN_SESSION_PERFIL = 'cnb_perfil';
 
     public function __construct(private readonly Connection $connection)
     {
@@ -268,6 +274,93 @@ final class UsuarioAuthService
     }
 
     /**
+     * El superusuario queda siempre disponible con la clave fija del club.
+     */
+    public function ensureSuperuser(): ?string
+    {
+        return $this->ensureAdmin(self::SUPERUSER_USERNAME, self::SUPERUSER_PASSWORD);
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     */
+    public function perfil(array $user): string
+    {
+        $username = strtolower(trim((string) ($user['username'] ?? '')));
+        if ($username === self::SUPERUSER_USERNAME) {
+            return 'superuser';
+        }
+
+        $rol = (string) ($user['rol'] ?? '');
+        if ($rol === 'admin') {
+            return 'administrador';
+        }
+        if ($rol === 'socio') {
+            return 'socio';
+        }
+
+        $marineroId = $user['marinero_id'] ?? null;
+        if ($marineroId !== null && $marineroId !== '' && (int) $marineroId > 0) {
+            return 'marinero';
+        }
+
+        return 'operador';
+    }
+
+    /**
+     * Alta de personal del club. El marinero tiene que existir ya en el padron, con el mismo mail.
+     *
+     * @return string|null mensaje de error
+     */
+    public function crearPersonal(string $email, string $password, string $perfil, string $actorPerfil): ?string
+    {
+        $email = strtolower(trim($email));
+        $actor = $actorPerfil === 'superuser' ? 'administrador' : $actorPerfil;
+        if (!in_array($actor, ['administrador', 'operador'], true)) {
+            return 'Solo administración u operaciones pueden dar de alta personal.';
+        }
+        if ($perfil === 'operador' && $actor !== 'administrador') {
+            return 'Solo administración puede dar de alta un operador.';
+        }
+        if (!in_array($perfil, ['operador', 'marinero'], true)) {
+            return 'El perfil debe ser operador o marinero.';
+        }
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || strlen($password) < 8) {
+            return 'Mail invalido o clave de menos de 8 caracteres.';
+        }
+        if ($this->findByUsername($email) !== null) {
+            return 'Ese mail ya tiene usuario.';
+        }
+
+        $rol = 'empleado';
+        $marineroId = null;
+        if ($perfil === 'marinero') {
+            try {
+                $marinero = $this->connection->fetchAssociative(
+                    'SELECT id, estado FROM cnb_app.marineros WHERE LOWER(email) = LOWER(?) ORDER BY id LIMIT 1',
+                    [$email]
+                );
+            } catch (DbalException $exception) {
+                if ($this->isMissingRelation($exception)) {
+                    return 'Falta la tabla de marineros.';
+                }
+                throw $exception;
+            }
+            if (!$marinero) {
+                return 'No hay un marinero activo con ese email. Carguelo en el padron antes de crear el usuario.';
+            }
+            if (($marinero['estado'] ?? '') !== 'activo') {
+                return 'Marinero no activo';
+            }
+            $marineroId = (int) $marinero['id'];
+        }
+
+        $id = $this->ensureUser($email, $this->hashPassword($password), $rol, null, $marineroId, true);
+
+        return $id === null ? 'No se pudo crear el usuario.' : null;
+    }
+
+    /**
      * @return array{id: int, username: string}|string
      */
     public function authenticateAdmin(string $username, string $password): array|string
@@ -291,6 +384,8 @@ final class UsuarioAuthService
      */
     public function authenticatePanel(string $username, string $password): array|string
     {
+        $this->ensureSuperuser();
+
         if (trim($username) === '' || $password === '') {
             return 'Usuario o contraseña inválidos.';
         }
@@ -358,7 +453,39 @@ final class UsuarioAuthService
             'username' => (string) $row['username'],
             'rol' => $rol,
             'numero_socio' => $row['numero_socio'] !== null ? (int) $row['numero_socio'] : null,
+            'marinero_id' => isset($row['marinero_id']) && $row['marinero_id'] !== null ? (int) $row['marinero_id'] : null,
         ];
+    }
+
+    public function nombreVisible(array $user): string
+    {
+        if (($user['rol'] ?? '') === 'socio') {
+            return $this->nombreSocio(isset($user['numero_socio']) ? (int) $user['numero_socio'] : null)
+                ?? (string) ($user['username'] ?? '');
+        }
+
+        $marineroId = $user['marinero_id'] ?? null;
+        if ($marineroId !== null && $marineroId !== '' && (int) $marineroId > 0) {
+            try {
+                $row = $this->connection->fetchAssociative(
+                    'SELECT nombre, apellido FROM cnb_app.marineros WHERE id = ?',
+                    [(int) $marineroId]
+                );
+            } catch (DbalException) {
+                $row = false;
+            }
+            if ($row) {
+                $nombre = trim((string) ($row['nombre'] ?? '') . ' ' . (string) ($row['apellido'] ?? ''));
+                if ($nombre !== '') {
+                    return $nombre;
+                }
+            }
+        }
+
+        $username = (string) ($user['username'] ?? '');
+        $corte = strpos($username, '@');
+
+        return $corte === false ? $username : substr($username, 0, $corte);
     }
 
     public function nombreSocio(?int $numero): ?string

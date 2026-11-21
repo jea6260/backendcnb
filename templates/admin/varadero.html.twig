@@ -157,7 +157,7 @@
     <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
         <div>
             <h1 class="h3 mb-1">Planificador de varadero</h1>
-            <p class="text-muted mb-0">Calendario, disponibilidad por espacio y validacion de propiedad de la embarcacion.</p>
+            <p class="text-muted mb-0">Son 15 días por año, si el lugar está libre. Al volver el barco a la amarra, el lugar se libera y el socio puede pedir otra vez.</p>
         </div>
         <div class="d-flex gap-2">
             <a class="btn btn-outline-secondary" href="{{ path('admin_dashboard') }}">Panel</a>
@@ -165,15 +165,88 @@
         </div>
     </div>
 
+    {% set etiquetas = {
+        pendiente: 'Esperando al operador',
+        confirmada: 'Confirmada, esperando al marinero',
+        en_curso: 'En varadero',
+        finalizada: 'Volvió a la amarra',
+        rechazada: 'Rechazada',
+        cancelada: 'Cancelada'
+    } %}
+    <ol class="list-group list-group-horizontal-md mb-3 shadow-sm">
+        <li class="list-group-item flex-fill">1. El socio pide</li>
+        <li class="list-group-item flex-fill">2. El operador confirma</li>
+        <li class="list-group-item flex-fill">3. El marinero marca la entrada</li>
+        <li class="list-group-item flex-fill">4. El marinero marca la vuelta a la amarra</li>
+    </ol>
+
     {% if error %}
         <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    {% if not solo_propio %}
+        <div class="card shadow-sm mb-3">
+            <div class="card-body">
+                <h2 class="h5 mb-1">Pedidos abiertos</h2>
+                <p class="text-muted small mb-3">Confirmar ocupa el lugar. Cuando el marinero marca que el barco volvió a la amarra, el lugar se libera y el socio puede hacer otro pedido si le quedan días de los 15 del año.</p>
+                {% if ciclo is empty %}
+                    <p class="mb-0">No hay pedidos abiertos.</p>
+                {% else %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Socio</th>
+                                    <th>Barco</th>
+                                    <th>Lugar</th>
+                                    <th>Fechas</th>
+                                    <th>Estado</th>
+                                    <th>Sigue</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for fila in ciclo %}
+                                    <tr>
+                                        <td>#{{ fila.numero_socio }}</td>
+                                        <td>{{ fila.embarcacion|default('—') }}</td>
+                                        <td>{{ fila.espacio|default('—') }}</td>
+                                        <td>{{ fila.fecha_inicio }} → {{ fila.fecha_fin }}</td>
+                                        <td>{{ etiquetas[fila.estado]|default(fila.estado) }}</td>
+                                        <td>{{ fila.estado == 'pendiente' ? 'Operador' : 'Marinero' }}</td>
+                                        <td class="text-end">
+                                            {% if fila.accion %}
+                                                <form method="post" class="d-inline">
+                                                    <input type="hidden" name="_accion" value="transicion">
+                                                    <input type="hidden" name="id" value="{{ fila.id }}">
+                                                    <input type="hidden" name="estado" value="{{ fila.accion.estado }}">
+                                                    <button class="btn btn-sm btn-primary" type="submit">{{ fila.accion.etiqueta }}</button>
+                                                </form>
+                                            {% endif %}
+                                            {% if fila.puede_rechazar %}
+                                                <form method="post" class="d-inline">
+                                                    <input type="hidden" name="_accion" value="transicion">
+                                                    <input type="hidden" name="id" value="{{ fila.id }}">
+                                                    <input type="hidden" name="estado" value="rechazada">
+                                                    <button class="btn btn-sm btn-outline-danger" type="submit">Rechazar</button>
+                                                </form>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
     {% endif %}
 
     <div class="row g-3">
         <div class="col-12 col-xl-4">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <h2 class="h5 mb-3" id="form-title">Nueva reserva</h2>
+                    <h2 class="h5 mb-3" id="form-title">{{ solo_propio ? 'Solicitar varadero' : 'Nueva reserva' }}</h2>
                     <form method="post" id="varadero-form" class="row g-3">
                         <input type="hidden" name="_accion" id="form-accion" value="{{ reserva_activa ? 'observacion' : 'crear' }}">
                         <input type="hidden" name="reserva_id" id="reserva_id" value="{{ reserva_activa.id|default('') }}">
@@ -195,10 +268,10 @@
 
                         <div class="col-12" id="active-reserva-panel" style="{{ reserva_activa ? '' : 'display:none' }}">
                             <div class="alert alert-warning mb-0">
-                                <div class="fw-semibold mb-1">Reserva activa: no puede cargar otra</div>
+                                <div class="fw-semibold mb-1">Pedido abierto: no podés cargar otro</div>
                                 <div class="small" id="active-reserva-summary">
                                     {% if reserva_activa %}
-                                        #{{ reserva_activa.id }} · {{ reserva_activa.estado }}
+                                        #{{ reserva_activa.id }} · {{ etiquetas[reserva_activa.estado]|default(reserva_activa.estado) }}
                                         · {{ reserva_activa.embarcacion|default('Sin embarcacion') }}
                                         · espacio {{ reserva_activa.espacio_codigo|default(reserva_activa.espacio_id) }}
                                         · {{ reserva_activa.fecha_inicio }} → {{ reserva_activa.fecha_fin }}
@@ -248,16 +321,8 @@
                                 </div>
 
                                 <div class="col-md-6">
-                                    <label class="form-label" for="estado">Estado</label>
-                                    <select class="form-select" id="estado" name="estado">
-                                        {% for value, label in {
-                                            pendiente: 'Pendiente',
-                                            confirmada: 'Confirmada',
-                                            en_curso: 'En curso'
-                                        } %}
-                                            <option value="{{ value }}" {% if data.estado == value %}selected{% endif %}>{{ label }}</option>
-                                        {% endfor %}
-                                    </select>
+                                    <input type="hidden" name="estado" value="pendiente">
+                                    <p class="form-text mb-0">El pedido entra pendiente. El operador lo confirma y el marinero marca la entrada y la salida.</p>
                                 </div>
 
                                 <div class="col-md-6">
@@ -276,7 +341,7 @@
 
                         <div class="col-12">
                             <button class="btn btn-primary" type="submit" id="btn-guardar">
-                                {{ reserva_activa ? 'Agregar observacion' : 'Crear reserva' }}
+                                {{ reserva_activa ? 'Agregar observacion' : (solo_propio ? 'Solicitar varadero' : 'Crear reserva') }}
                             </button>
                         </div>
                     </form>
@@ -352,6 +417,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
     const daysBetween = (a, b) => Math.round((parseISO(b) - parseISO(a)) / 86400000) + 1;
     const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const textoNuevo = {{ (solo_propio ? 'Solicitar varadero' : 'Nueva reserva')|json_encode|raw }};
+    const textoBoton = {{ (solo_propio ? 'Solicitar varadero' : 'Crear reserva')|json_encode|raw }};
+    const etiquetasEstado = {
+        pendiente: 'Esperando al operador',
+        confirmada: 'Confirmada, esperando al marinero',
+        en_curso: 'En varadero',
+        finalizada: 'Volvió a la amarra',
+        rechazada: 'Rechazada',
+        cancelada: 'Cancelada'
+    };
 
     function dayInRanges(iso) {
         const d = parseISO(iso);
@@ -406,7 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.textContent = 'Agregar observacion';
             barcoSelect.required = false;
             espacioSelect.required = false;
-            summary.textContent = `#${reserva.id} · ${reserva.estado} · ${reserva.embarcacion || 'Sin embarcacion'} · espacio ${reserva.espacio_codigo || reserva.espacio_id} · ${reserva.fecha_inicio} → ${reserva.fecha_fin}`;
+            summary.textContent = `#${reserva.id} · ${etiquetasEstado[reserva.estado] || reserva.estado} · ${reserva.embarcacion || 'Sin embarcacion'} · espacio ${reserva.espacio_codigo || reserva.espacio_id} · ${reserva.fecha_inicio} → ${reserva.fecha_fin}`;
             if (reserva.observaciones) {
                 obsPrev.style.display = '';
                 obsPrev.textContent = reserva.observaciones;
@@ -419,11 +494,11 @@ document.addEventListener('DOMContentLoaded', () => {
             createFields.style.display = '';
             formAccion.value = 'crear';
             reservaId.value = '';
-            formTitle.textContent = 'Nueva reserva';
+            formTitle.textContent = textoNuevo;
             obsLabel.textContent = 'Observaciones';
             obs.required = false;
             obs.placeholder = '';
-            btn.textContent = 'Crear reserva';
+            btn.textContent = textoBoton;
             barcoSelect.required = true;
             espacioSelect.required = true;
             if (help) help.textContent = 'Solo se listan embarcaciones activas del socio.';

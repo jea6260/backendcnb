@@ -1,3 +1,15 @@
+{% set layout %}{% block layout %}app{% endblock %}{% endset %}
+{% set logged = app.session.get('cnb_admin_username') %}
+{% set perfil = app.session.get('cnb_perfil') %}
+{% set en_panel = logged and layout|trim != 'guest' %}
+{% set ruta = app.request.pathInfo %}
+{% set apps = {
+    'superuser': 'Administración',
+    'administrador': 'Administración',
+    'operador': 'Operaciones',
+    'marinero': 'Marineros',
+    'socio': 'Socios'
+} %}
 <!DOCTYPE html>
 <html lang="es">
     <head>
@@ -17,53 +29,81 @@
         <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload/+esm" type="module"></script>
         {% endif %}
     </head>
-    <body>
-        <header class="cnb-header mb-4">
-            <div class="container-fluid d-flex align-items-center justify-content-between gap-3">
-                <a class="cnb-brand" href="{{ path(app.session.get('cnb_admin_username') ? 'admin_dashboard' : 'admin_login') }}">
-                    <img
-                        class="cnb-brand-logo"
-                        src="/images/cnb_logo.jpeg"
-                        alt="Club Náutico Bariloche"
-                        width="51"
-                        height="72"
-                    >
-                    <span>
-                        <span class="cnb-brand-title">Club Náutico Bariloche</span>
-                        <span class="cnb-brand-sub">operaciones</span>
-                    </span>
-                </a>
-                <nav class="nav align-items-center">
-                    {% if app.session.get('cnb_admin_username') %}
-                        {% if app.session.get('cnb_rol') == 'socio' %}
-                            <a class="nav-link" href="{{ path('admin_dashboard') }}">Inicio</a>
-                            <a class="nav-link" href="{{ path('admin_nivel_lago') }}">Nivel del lago</a>
-                            <a class="nav-link" href="{{ path('admin_timbre') }}">Timbre</a>
-                            <a class="nav-link" href="{{ path('admin_varadero') }}">Varadero</a>
-                            <a class="nav-link" href="{{ path('admin_amarras') }}">Amarras</a>
+    <body class="{{ en_panel ? 'cnb-app' : 'cnb-guest' }}">
+        {% if en_panel %}
+            <div class="cnb-shell" id="cnb-shell">
+                <aside class="cnb-menu" id="cnb-menu">
+                    <nav class="cnb-menu-nav">
+                        {% if perfil == 'socio' %}
+                            {% set items = [
+                                {href: path('admin_dashboard'), label: 'Inicio', match: '/admin'},
+                                {href: path('admin_nivel_lago'), label: 'Nivel del lago', match: '/admin/nivel-lago'},
+                                {href: path('admin_timbre'), label: 'Timbre marineros', match: '/admin/timbre'},
+                                {href: path('admin_varadero'), label: 'Varadero', match: '/admin/varadero'},
+                                {href: path('admin_amarras'), label: 'Amarras', match: '/admin/amarras'}
+                            ] %}
                         {% else %}
-                            <a class="nav-link" href="{{ path('admin_dashboard') }}">Admin</a>
-                            <a class="nav-link" href="{{ path('admin_nivel_lago') }}">Nivel del lago</a>
-                            <a class="nav-link" href="{{ path('admin_varadero') }}">Varadero</a>
-                            <a class="nav-link" href="{{ path('admin_amarras') }}">Amarras</a>
-                            <a class="nav-link" href="/api/health">API</a>
+                            {% set items = [
+                                {href: path('admin_dashboard'), label: 'Inicio', match: '/admin'},
+                                {href: path('admin_nivel_lago'), label: 'Nivel del lago', match: '/admin/nivel-lago'},
+                                {href: path('admin_varadero'), label: 'Varadero', match: '/admin/varadero'},
+                                {href: path('admin_amarras'), label: 'Amarras', match: '/admin/amarras'},
+                                {href: path('admin_resource_index', {resource: 'socios'}), label: 'Socios', match: '/admin/socios'},
+                                {href: path('admin_resource_index', {resource: 'embarcaciones'}), label: 'Embarcaciones', match: '/admin/embarcaciones'},
+                                {href: path('admin_resource_index', {resource: 'marineros'}), label: 'Marineros', match: '/admin/marineros'},
+                                {href: path('admin_resource_index', {resource: 'tareas'}), label: 'Tareas', match: '/admin/tareas'}
+                            ] %}
+                            {% if perfil in ['administrador', 'superuser', 'operador'] %}
+                                {% set items = [{href: path('admin_dashboard'), label: 'Inicio', match: '/admin'}, {href: path('admin_dashboard') ~ '#personal', label: 'Personal', match: ''}]|merge(items|slice(1)) %}
+                            {% endif %}
                         {% endif %}
-                        <a class="nav-link" href="{{ path('admin_cuenta') }}">Mi cuenta</a>
-                        <form method="post" action="{{ path('admin_logout') }}" class="d-flex align-items-center gap-2 ms-2 mb-0">
-                            <span class="nav-link py-0">
-                                {% if app.session.get('cnb_rol') == 'socio' and app.session.get('cnb_socio_nombre') %}
-                                    {{ app.session.get('cnb_socio_nombre') }} · {{ app.session.get('cnb_numero_socio') }}
-                                {% else %}
-                                    {{ app.session.get('cnb_admin_username') }}
-                                {% endif %}
+                        {% for item in items %}
+                            {% set activo = item.match != '' and (item.match == '/admin' ? ruta == '/admin' : ruta starts with item.match) %}
+                            <a class="cnb-menu-link{{ activo ? ' is-active' : '' }}" href="{{ item.href }}">{{ item.label }}</a>
+                        {% endfor %}
+                    </nav>
+                    <form method="post" action="{{ path('admin_logout') }}" class="cnb-menu-salir">
+                        <button class="btn btn-outline-primary w-100" type="submit">Salir</button>
+                    </form>
+                </aside>
+                <div class="cnb-main">
+                    <header class="cnb-top">
+                        <button class="cnb-menu-toggle" id="cnb-menu-toggle" type="button" aria-label="Mostrar u ocultar el menú" aria-controls="cnb-menu">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </button>
+                        <a class="cnb-brand" href="{{ path('admin_dashboard') }}">
+                            <img class="cnb-brand-logo" src="/images/cnb_logo.jpeg" alt="Club Náutico Bariloche" width="51" height="72">
+                            <span>
+                                <span class="cnb-brand-title">Club Náutico Bariloche</span>
+                                <span class="cnb-brand-sub">{{ apps[perfil]|default('Club') }}</span>
                             </span>
-                            <button class="btn btn-outline-primary btn-sm" type="submit">Salir</button>
-                        </form>
-                    {% endif %}
-                </nav>
-            </div>
-        </header>
-        <main class="container-fluid pb-5">
+                        </a>
+                        <a class="cnb-profile" href="{{ path('admin_cuenta') }}">
+                            <span class="cnb-profile-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="28" height="28">
+                                    <circle cx="12" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                                    <path d="M5 19.2c1.4-3 3.8-4.5 7-4.5s5.6 1.5 7 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                </svg>
+                            </span>
+                            <span class="cnb-profile-name">{{ app.session.get('cnb_socio_nombre') }}</span>
+                        </a>
+                    </header>
+        {% else %}
+            <header class="cnb-header mb-4">
+                <div class="container-fluid d-flex align-items-center gap-3">
+                    <a class="cnb-brand" href="{{ path(logged ? 'admin_dashboard' : 'admin_login') }}">
+                        <img class="cnb-brand-logo" src="/images/cnb_logo.jpeg" alt="Club Náutico Bariloche" width="51" height="72">
+                        <span>
+                            <span class="cnb-brand-title">Club Náutico Bariloche</span>
+                            <span class="cnb-brand-sub">ingreso</span>
+                        </span>
+                    </a>
+                </div>
+            </header>
+        {% endif %}
+        <main class="{{ en_panel ? 'cnb-content' : 'container-fluid pb-5' }}">
             {% for label, messages in app.flashes %}
                 {% for message in messages %}
                     <div class="alert alert-{{ label }}">{{ message }}</div>
@@ -71,6 +111,24 @@
             {% endfor %}
             {% block body %}{% endblock %}
         </main>
+        {% if en_panel %}
+                </div>
+            </div>
+            <script>
+                (function () {
+                    var shell = document.getElementById('cnb-shell');
+                    var button = document.getElementById('cnb-menu-toggle');
+                    if (!shell || !button) return;
+                    if (localStorage.getItem('cnb-menu') === 'oculto') {
+                        shell.classList.add('is-collapsed');
+                    }
+                    button.addEventListener('click', function () {
+                        shell.classList.toggle('is-collapsed');
+                        localStorage.setItem('cnb-menu', shell.classList.contains('is-collapsed') ? 'oculto' : 'visible');
+                    });
+                })();
+            </script>
+        {% endif %}
         {% block javascripts %}
         {% endblock %}
     </body>

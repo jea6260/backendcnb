@@ -92,6 +92,20 @@ final class AdminController extends AbstractController
 
             if ($error !== null) {
                 // La embarcacion no es del socio: no se guarda nada.
+            } elseif ($accion === 'transicion') {
+                $actor = $this->usuarios->findActivePanelUser($this->sessionUserId($session));
+                $resultado = $this->varadero->transicionar(
+                    (int) ($data['id'] ?? 0),
+                    (string) ($data['estado'] ?? ''),
+                    $actor === null ? '' : $this->usuarios->perfil($actor),
+                );
+                if (!$resultado['ok']) {
+                    $error = $resultado['error'];
+                } else {
+                    $this->addFlash('success', 'Reserva actualizada.');
+
+                    return $this->redirectToRoute('admin_varadero');
+                }
             } elseif ($accion === 'observacion') {
                 $reservaId = (int) ($data['reserva_id'] ?? 0);
                 $numeroSocio = (int) ($data['numero_socio'] ?? 0);
@@ -164,6 +178,29 @@ final class AdminController extends AbstractController
             $reservaActiva = $this->varadero->reservaBloqueanteDeSocio($numeroSocio);
         }
 
+        $actor = $this->usuarios->findActivePanelUser($this->sessionUserId($session));
+        $perfil = $actor === null ? '' : $this->usuarios->perfil($actor);
+        $ciclo = [];
+        if (!$soloPropio) {
+            $abiertas = $this->connection->fetchAllAssociative(
+                "SELECT r.id, r.estado, r.numero_socio, r.fecha_inicio, r.fecha_fin,
+                        e.nombre AS embarcacion, sp.codigo AS espacio
+                 FROM cnb_app.reservas_varadero r
+                 LEFT JOIN cnb_app.embarcaciones e ON e.id = r.embarcacion_id
+                 LEFT JOIN cnb_app.espacios_varadero sp ON sp.id = r.espacio_id
+                 WHERE r.estado IN ('pendiente', 'confirmada', 'en_curso')
+                 ORDER BY r.fecha_inicio ASC, r.id ASC"
+            );
+            foreach ($abiertas as $fila) {
+                $fila['fecha_inicio'] = substr((string) $fila['fecha_inicio'], 0, 10);
+                $fila['fecha_fin'] = substr((string) $fila['fecha_fin'], 0, 10);
+                $fila['accion'] = $this->varadero->accionDisponible($perfil, (string) $fila['estado']);
+                $fila['puede_rechazar'] = $fila['estado'] === 'pendiente'
+                    && in_array($perfil, ['operador', 'administrador', 'superuser'], true);
+                $ciclo[] = $fila;
+            }
+        }
+
         return $this->render('admin/varadero.html.twig', [
             'data' => $data,
             'error' => $error,
@@ -177,6 +214,8 @@ final class AdminController extends AbstractController
             'dias_max_reserva' => VaraderoService::DIAS_MAX_RESERVA,
             'dias_max_anio' => VaraderoService::DIAS_MAX_ANIO,
             'solo_propio' => $soloPropio,
+            'ciclo' => $ciclo,
+            'perfil' => $perfil,
         ]);
     }
 
@@ -252,30 +291,30 @@ final class AdminController extends AbstractController
     public function altaPersonal(Request $request): Response
     {
         $session = $request->getSession();
-        if ($session->get(UsuarioAuthService::ADMIN_SESSION_ROL) !== 'admin') {
+        $actor = $this->usuarios->findActivePanelUser($this->sessionUserId($session));
+        $actorPerfil = $actor === null ? '' : $this->usuarios->perfil($actor);
+        if (!in_array($actorPerfil, ['administrador', 'superuser', 'operador'], true)) {
             return $this->redirectToRoute('admin_dashboard');
         }
 
         $email = strtolower(trim((string) $request->request->get('email', '')));
         $password = (string) $request->request->get('password', '');
-        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || strlen($password) < 8) {
-            $this->addFlash('danger', 'Mail inválido o clave de menos de 8 caracteres.');
-
-            return $this->redirectToRoute('admin_dashboard');
-        }
-
-        if ($this->usuarios->findByUsername($email) !== null) {
-            $this->addFlash('danger', 'Ese mail ya tiene usuario.');
-
-            return $this->redirectToRoute('admin_dashboard');
-        }
-
-        $id = $this->usuarios->ensureUser($email, $this->usuarios->hashPassword($password), 'empleado', null, null, true);
-        $this->addFlash($id === null ? 'danger' : 'success', $id === null
-            ? 'No se pudo crear el personal del club.'
-            : 'Personal del club creado. Entra con ese mail y tiene que cambiar la clave.');
+        $perfil = (string) $request->request->get('perfil', 'marinero');
+        $errorAlta = $this->usuarios->crearPersonal($email, $password, $perfil, $actorPerfil);
+        $this->addFlash($errorAlta === null ? 'success' : 'danger', $errorAlta
+            ?? 'Cuenta creada. Entra en la web y en la app con ese mail. Tiene que cambiar la clave.');
 
         return $this->redirectToRoute('admin_dashboard');
+    }
+
+    private function sessionUserId(\Symfony\Component\HttpFoundation\Session\SessionInterface $session): int
+    {
+        $raw = $session->get(UsuarioAuthService::ADMIN_SESSION_ID);
+        if (is_int($raw)) {
+            return $raw;
+        }
+
+        return is_string($raw) && ctype_digit($raw) ? (int) $raw : (int) $raw;
     }
 
     private function numeroForzado(Request $request): ?int
@@ -517,14 +556,33 @@ final class AdminController extends AbstractController
 
             try {
                 if ($resource === 'reservas-varadero') {
+                    $actual = (string) ($row['estado'] ?? '');
+                    $pedido = (string) ($data['estado'] ?? $actual);
                     $resultado = $this->varadero->validarYPrepararReserva($data, (int) $id);
                     if (!$resultado['ok']) {
                         $error = $resultado['error'];
                     } else {
-                        $this->connection->update($definition['table'], $resultado['payload'], [$pk => $id]);
-                        $this->addFlash('success', sprintf('%s actualizado correctamente.', $definition['singular']));
+                        $payload = $resultado['payload'];
+                        unset($payload['estado']);
+                        if ($pedido !== $actual) {
+                            $actor = $this->usuarios->findActivePanelUser($this->sessionUserId($request->getSession()));
+                            $paso = $this->varadero->transicionar(
+                                (int) $id,
+                                $pedido,
+                                $actor === null ? '' : $this->usuarios->perfil($actor),
+                            );
+                            if (!$paso['ok']) {
+                                $error = $paso['error'];
+                            }
+                        }
+                        if ($error === null) {
+                            if ($payload !== []) {
+                                $this->connection->update($definition['table'], $payload, [$pk => $id]);
+                            }
+                            $this->addFlash('success', sprintf('%s actualizado correctamente.', $definition['singular']));
 
-                        return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                            return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                        }
                     }
                 } else {
                     $data = $this->mergeUploadedImages($request, $definition, $data);

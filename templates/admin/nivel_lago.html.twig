@@ -1,5 +1,9 @@
 {% extends 'base.html.twig' %}
 
+{% set publico = publico|default(false) %}
+
+{% block layout %}{{ publico|default(false) ? 'nivel' : 'app' }}{% endblock %}
+
 {% block title %}Nivel del lago · CNB Operaciones{% endblock %}
 
 {% block stylesheets %}
@@ -26,13 +30,22 @@
             <h1 class="h3 mb-1">Nivel del lago</h1>
             <p class="text-muted mb-0">Evolucion msnm · {{ desde }} → {{ hasta }} · {{ total }} lecturas</p>
         </div>
-        <div class="btn-group" role="group" aria-label="Rango">
-            <a class="btn btn-outline-primary rango-btn {{ rango == 'semana' ? 'active' : '' }}"
-               href="{{ path('admin_nivel_lago', {rango: 'semana'}) }}">Ultima semana</a>
-            <a class="btn btn-outline-primary rango-btn {{ rango == 'mes' ? 'active' : '' }}"
-               href="{{ path('admin_nivel_lago', {rango: 'mes'}) }}">Ultimo mes</a>
-            <a class="btn btn-outline-primary rango-btn {{ rango == 'anio' ? 'active' : '' }}"
-               href="{{ path('admin_nivel_lago', {rango: 'anio'}) }}">Ultimo año</a>
+        <div class="d-flex gap-2 align-items-start flex-wrap">
+            <div class="btn-group" role="group" aria-label="Rango">
+                <a class="btn btn-outline-primary rango-btn {{ rango == 'semana' ? 'active' : '' }}"
+                   href="{{ path(publico ? 'nivel_lago_publico' : 'admin_nivel_lago', {rango: 'semana'}) }}">Ultima semana</a>
+                <a class="btn btn-outline-primary rango-btn {{ rango == 'mes' ? 'active' : '' }}"
+                   href="{{ path(publico ? 'nivel_lago_publico' : 'admin_nivel_lago', {rango: 'mes'}) }}">Ultimo mes</a>
+                <a class="btn btn-outline-primary rango-btn {{ rango == 'anio' ? 'active' : '' }}"
+                   href="{{ path(publico ? 'nivel_lago_publico' : 'admin_nivel_lago', {rango: 'anio'}) }}">Ultimo año</a>
+            </div>
+            {% if publico %}
+                <form method="post" action="{{ path('nivel_lago_publico') }}">
+                    <input type="hidden" name="_token" value="{{ app.session.get('cnb_nivel_token') }}">
+                    <input type="hidden" name="accion" value="salir">
+                    <button class="btn btn-outline-secondary" type="submit">Salir</button>
+                </form>
+            {% endif %}
         </div>
     </header>
 
@@ -76,12 +89,14 @@
         {% endif %}
     </div>
 
-    <div class="d-flex gap-2 flex-wrap">
-        <a class="btn btn-outline-primary" href="{{ path('admin_resource_index', {resource: 'mediciones-nivel'}) }}">
-            Ver tabla / CRUD
-        </a>
-        <a class="btn btn-outline-secondary" href="{{ path('admin_dashboard') }}">Volver al panel</a>
-    </div>
+    {% if not publico %}
+        <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-outline-primary" href="{{ path('admin_resource_index', {resource: 'mediciones-nivel'}) }}">
+                Ver tabla / CRUD
+            </a>
+            <a class="btn btn-outline-secondary" href="{{ path('admin_dashboard') }}">Volver al panel</a>
+        </div>
+    {% endif %}
 {% endblock %}
 
 {% block javascripts %}

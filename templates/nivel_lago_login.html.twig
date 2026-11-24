@@ -1,0 +1,30 @@
+{% extends 'base.html.twig' %}
+
+{% block layout %}nivel{% endblock %}
+
+{% block title %}Nivel del lago · Club Náutico Bariloche{% endblock %}
+
+{% block body %}
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-6 col-lg-5">
+            <h1 class="h3 mb-3">Nivel del lago</h1>
+            {% if error %}
+                <div class="alert alert-danger">{{ error }}</div>
+            {% endif %}
+            <form method="post" action="{{ path('nivel_lago_publico') }}" class="card shadow-sm">
+                <div class="card-body d-grid gap-3">
+                    <input type="hidden" name="_token" value="{{ token }}">
+                    <div>
+                        <label class="form-label" for="username">Usuario</label>
+                        <input class="form-control" id="username" name="username" type="text" autocomplete="username" required value="{{ username }}">
+                    </div>
+                    <div>
+                        <label class="form-label" for="password">Clave</label>
+                        <input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Entrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}

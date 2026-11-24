@@ -1,7 +1,8 @@
 {% set layout %}{% block layout %}app{% endblock %}{% endset %}
+{% set modo = layout|trim %}
 {% set logged = app.session.get('cnb_admin_username') %}
 {% set perfil = app.session.get('cnb_perfil') %}
-{% set en_panel = logged and layout|trim != 'guest' %}
+{% set en_panel = logged and modo == 'app' %}
 {% set ruta = app.request.pathInfo %}
 {% set apps = {
     'superuser': 'Administración',
@@ -72,13 +73,23 @@
         {% else %}
             <header class="cnb-header mb-4">
                 <div class="container-fluid d-flex align-items-center gap-3">
-                    <a class="cnb-brand" href="{{ path(logged ? 'admin_dashboard' : 'admin_login') }}">
-                        <img class="cnb-brand-logo" src="/images/cnb_logo.jpeg" alt="Club Náutico Bariloche" width="51" height="72">
-                        <span>
-                            <span class="cnb-brand-title">Club Náutico Bariloche</span>
-                            <span class="cnb-brand-sub">ingreso</span>
+                    {% if modo == 'nivel' %}
+                        <span class="cnb-brand">
+                            <img class="cnb-brand-logo" src="/images/cnb_logo.jpeg" alt="Club Náutico Bariloche" width="51" height="72">
+                            <span>
+                                <span class="cnb-brand-title">Club Náutico Bariloche</span>
+                                <span class="cnb-brand-sub">Nivel del lago</span>
+                            </span>
                         </span>
-                    </a>
+                    {% else %}
+                        <a class="cnb-brand" href="{{ path(logged ? 'admin_dashboard' : 'admin_login') }}">
+                            <img class="cnb-brand-logo" src="/images/cnb_logo.jpeg" alt="Club Náutico Bariloche" width="51" height="72">
+                            <span>
+                                <span class="cnb-brand-title">Club Náutico Bariloche</span>
+                                <span class="cnb-brand-sub">ingreso</span>
+                            </span>
+                        </a>
+                    {% endif %}
                 </div>
             </header>
         {% endif %}

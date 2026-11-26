@@ -6,7 +6,7 @@ SET search_path TO cnb_app, public;
 
 CREATE TABLE IF NOT EXISTS timbre_cola (
     id BIGSERIAL PRIMARY KEY,
-    numero_socio INTEGER NOT NULL
+    numero_socio INTEGER
         REFERENCES socios(numero_socio) ON DELETE CASCADE,
     relay VARCHAR(60) NOT NULL DEFAULT 'Timbre',
     tiempo_seg SMALLINT NOT NULL DEFAULT 3

@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Service\RelayService;
 use App\Service\UsuarioAuthService;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception as DbalException;
@@ -21,6 +22,7 @@ final class EmpleadoAuthController extends AbstractController
     public function __construct(
         private readonly Connection $connection,
         private readonly UsuarioAuthService $usuarios,
+        private readonly RelayService $relay,
     ) {
     }
 
@@ -234,6 +236,135 @@ final class EmpleadoAuthController extends AbstractController
         $this->usuarios->updatePassword((int) $user['id'], $next);
 
         return $this->json(['status' => 'OK', 'data' => ['ok' => true]]);
+    }
+
+    #[Route('/timbre', name: 'api_empleado_timbre', methods: ['GET'])]
+    public function timbre(Request $request): JsonResponse
+    {
+        $user = $this->authenticate($request);
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+        if (!$this->veTimbre((string) ($user['perfil'] ?? ''))) {
+            return $this->json(['error' => 'No tiene acceso al historial del timbre'], Response::HTTP_FORBIDDEN);
+        }
+
+        $tz = new \DateTimeZone('America/Argentina/Buenos_Aires');
+        $pedido = trim((string) $request->query->get('fecha', ''));
+        if ($pedido === '') {
+            $inicio = new \DateTimeImmutable('today', $tz);
+        } else {
+            $inicio = \DateTimeImmutable::createFromFormat('!Y-m-d', $pedido, $tz);
+            $errores = \DateTimeImmutable::getLastErrors();
+            $invalida = !$inicio
+                || (is_array($errores) && (($errores['warning_count'] ?? 0) > 0 || ($errores['error_count'] ?? 0) > 0));
+            if ($invalida) {
+                return $this->json(['error' => 'fecha debe ser AAAA-MM-DD'], Response::HTTP_BAD_REQUEST);
+            }
+        }
+        $fin = $inicio->modify('+1 day');
+
+        try {
+            $filas = $this->connection->fetchAllAssociative(
+                'SELECT h.id, h.numero_socio, h.created_at, s.apellido, s.nombre
+                 FROM cnb_app.historial_relays h
+                 LEFT JOIN cnb_app.socios s ON s.numero_socio = h.numero_socio
+                 WHERE h.relay = \'Timbre\'
+                   AND h.created_at >= ? AND h.created_at < ?
+                 ORDER BY h.created_at DESC',
+                [$inicio->format(DATE_ATOM), $fin->format(DATE_ATOM)]
+            );
+        } catch (DbalException $exception) {
+            return $this->dbalError($exception);
+        }
+
+        $accesos = [];
+        foreach ($filas as $fila) {
+            $cuando = new \DateTimeImmutable((string) $fila['created_at']);
+            $accesos[] = [
+                'id' => (int) $fila['id'],
+                'numero_socio' => (int) $fila['numero_socio'],
+                'apellido' => (string) ($fila['apellido'] ?? ''),
+                'nombre' => (string) ($fila['nombre'] ?? ''),
+                'created_at' => $cuando->format(DATE_ATOM),
+            ];
+        }
+
+        return $this->json([
+            'data' => [
+                'fecha' => $inicio->format('Y-m-d'),
+                'accesos' => $accesos,
+            ],
+        ]);
+    }
+
+    #[Route('/timbre', name: 'api_empleado_timbre_activar', methods: ['POST'])]
+    public function activarTimbre(Request $request): JsonResponse
+    {
+        $user = $this->authenticate($request);
+        if ($user instanceof JsonResponse) {
+            return $user;
+        }
+        if (!$this->puedeActivarTimbre((string) ($user['perfil'] ?? ''))) {
+            return $this->json(['error' => 'Solo operador y admin pueden activar el timbre'], Response::HTTP_FORBIDDEN);
+        }
+
+        $numero = isset($user['numero_socio']) ? (int) $user['numero_socio'] : 0;
+        try {
+            if ($numero > 0) {
+                $inserted = $this->connection->executeStatement(
+                    "INSERT INTO cnb_app.timbre_cola (numero_socio, relay, tiempo_seg)
+                     SELECT ?, 'Timbre', 3
+                     WHERE NOT EXISTS (
+                       SELECT 1 FROM cnb_app.timbre_cola
+                       WHERE numero_socio = ? AND estado = 'pendiente' AND expira_at > NOW()
+                     )",
+                    [$numero, $numero]
+                );
+            } else {
+                $inserted = $this->connection->executeStatement(
+                    "INSERT INTO cnb_app.timbre_cola (numero_socio, relay, tiempo_seg)
+                     SELECT NULL, 'Timbre', 3
+                     WHERE NOT EXISTS (
+                       SELECT 1 FROM cnb_app.timbre_cola
+                       WHERE numero_socio IS NULL AND estado = 'pendiente' AND expira_at > NOW()
+                     )"
+                );
+            }
+        } catch (DbalException $exception) {
+            return $this->dbalError($exception);
+        }
+
+        if ($inserted !== 1) {
+            return $this->json([
+                'data' => [
+                    'enviado' => false,
+                    'mensaje' => 'Ya hay un timbre en camino.',
+                ],
+            ]);
+        }
+
+        $this->relay->trigger('timbre_marineros', [
+            'origen' => 'personal',
+            'usuario' => $user['username'] ?? null,
+        ]);
+
+        return $this->json([
+            'data' => [
+                'enviado' => true,
+                'mensaje' => 'Timbre enviado. Suena en la sede en unos segundos.',
+            ],
+        ]);
+    }
+
+    private function veTimbre(string $perfil): bool
+    {
+        return in_array($perfil, ['marinero', 'operador', 'administrador', 'superuser'], true);
+    }
+
+    private function puedeActivarTimbre(string $perfil): bool
+    {
+        return in_array($perfil, ['operador', 'administrador', 'superuser'], true);
     }
 
     /**

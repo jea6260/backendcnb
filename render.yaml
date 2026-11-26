@@ -1,15 +1,14 @@
 # Blueprint de Render: https://render.com/docs/blueprint-spec
-# Deploy nativo (sin Docker). La base de datos vive en Neon.
-# Dashboard: New → Blueprint → conectar este repo
-# o New → Web Service con Build/Start commands de abajo.
+# El backend corre en Docker. La base sigue en Neon (DATABASE_URL).
+# No crea Postgres en Render.
 
 services:
   - type: web
     name: cnb-backend
-    runtime: native
+    runtime: docker
     plan: free
-    buildCommand: composer install --no-dev --optimize-autoloader --no-interaction
-    startCommand: php -S 0.0.0.0:$PORT -t public public/router.php
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /api/health
     envVars:
       - key: APP_ENV

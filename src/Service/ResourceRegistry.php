@@ -66,13 +66,19 @@ final class ResourceRegistry
                 ],
             ],
             'marineros' => [
-                'table' => 'marineros',
-                'label' => 'Marineros',
-                'singular' => 'Marinero',
-                'description' => 'Equipo operativo al que se asignan tareas.',
+                'table' => 'personal_cnb',
+                'label' => 'Personal del club',
+                'singular' => 'Empleado del club',
+                'description' => 'Empleados del club. El rol define si entra como admin, marinero, operaciones o guardia.',
                 'fields' => [
                     'nombre' => ['label' => 'Nombre', 'type' => 'text', 'required' => true, 'list' => true],
                     'apellido' => ['label' => 'Apellido', 'type' => 'text', 'required' => true, 'list' => true],
+                    'rol' => ['label' => 'Rol', 'type' => 'choice', 'required' => true, 'default' => 'marinero', 'list' => true, 'choices' => [
+                        'admin' => 'Admin',
+                        'marinero' => 'Marinero',
+                        'operaciones' => 'Operaciones',
+                        'guardia' => 'Guardia',
+                    ]],
                     'email' => ['label' => 'Email', 'type' => 'email'],
                     'telefono' => ['label' => 'Telefono', 'type' => 'text', 'list' => true],
                     'especialidad' => ['label' => 'Especialidad', 'type' => 'text', 'list' => true],
@@ -276,10 +282,10 @@ final class ResourceRegistry
                 'table' => 'tarea_asignaciones',
                 'label' => 'Asignaciones de tareas',
                 'singular' => 'Asignacion',
-                'description' => 'Relacion entre tareas y marineros asignados.',
+                'description' => 'Relacion entre tareas y el personal del club.',
                 'fields' => [
                     'tarea_id' => ['label' => 'Tarea', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'tareas', 'label' => "titulo"]],
-                    'marinero_id' => ['label' => 'Marinero', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'marineros', 'label' => "apellido || ', ' || nombre"]],
+                    'marinero_id' => ['label' => 'Empleado', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'personal_cnb', 'label' => "apellido || ', ' || nombre || ' (' || rol || ')'"]],
                     'rol' => ['label' => 'Rol', 'type' => 'text', 'list' => true],
                     'finalizado_at' => ['label' => 'Finalizado', 'type' => 'datetime'],
                 ],
@@ -291,7 +297,7 @@ final class ResourceRegistry
                 'description' => 'Bitacora de progreso y comentarios de trabajos.',
                 'fields' => [
                     'tarea_id' => ['label' => 'Tarea', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'tareas', 'label' => "titulo"]],
-                    'marinero_id' => ['label' => 'Marinero', 'type' => 'relation', 'relation' => ['table' => 'marineros', 'label' => "apellido || ', ' || nombre"]],
+                    'marinero_id' => ['label' => 'Empleado', 'type' => 'relation', 'relation' => ['table' => 'personal_cnb', 'label' => "apellido || ', ' || nombre || ' (' || rol || ')'"]],
                     'progreso' => ['label' => 'Progreso %', 'type' => 'integer', 'required' => true, 'list' => true],
                     'estado' => ['label' => 'Estado', 'type' => 'choice', 'required' => true, 'default' => 'en_progreso', 'list' => true, 'choices' => [
                         'pendiente' => 'Pendiente',

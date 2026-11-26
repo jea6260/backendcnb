@@ -106,7 +106,7 @@ final class AdminAuthSubscriber implements EventSubscriberInterface
             return !$this->socioAllowed($path);
         }
 
-        if ($perfil === 'marinero') {
+        if (in_array($perfil, ['marinero', 'guardia'], true)) {
             if ($recurso !== null) {
                 $permiso = $this->usuarios->permisoRecurso($perfil, $recurso);
                 if (!$permiso['ver']) {

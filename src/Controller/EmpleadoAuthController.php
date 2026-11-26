@@ -13,7 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Alta y login de empleados (marineros) con el mismo esquema user/pass + token que ovmovil v3.
+ * Alta y login de empleados del club con el mismo esquema user/pass + token que ovmovil v3.
  * La biometria no llega al servidor: solo se emite el token de sesion.
  */
 #[Route('/api/empleado', priority: 10)]
@@ -38,7 +38,7 @@ final class EmpleadoAuthController extends AbstractController
         }
 
         if (!filter_var($user, FILTER_VALIDATE_EMAIL)) {
-            return $this->json(['error' => 'El usuario debe ser el email del marinero'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['error' => 'El usuario debe ser el email del empleado del club'], Response::HTTP_BAD_REQUEST);
         }
 
         if (strlen($pass) < 8) {
@@ -47,8 +47,8 @@ final class EmpleadoAuthController extends AbstractController
 
         try {
             $marinero = $this->connection->fetchAssociative(
-                'SELECT id, nombre, apellido, email, estado
-                 FROM cnb_app.marineros
+                'SELECT id, nombre, apellido, email, estado, rol
+                 FROM cnb_app.personal_cnb
                  WHERE LOWER(email) = LOWER(?)
                  ORDER BY id
                  LIMIT 1',
@@ -57,13 +57,13 @@ final class EmpleadoAuthController extends AbstractController
 
             if (!$marinero) {
                 return $this->json(
-                    ['error' => 'No hay un marinero activo con ese email. Carguelo en el padron antes de crear el usuario.'],
+                    ['error' => 'No hay un empleado del club activo con ese email. Carguelo en el padron antes de crear el usuario.'],
                     Response::HTTP_NOT_FOUND
                 );
             }
 
             if (($marinero['estado'] ?? '') !== 'activo') {
-                return $this->json(['error' => 'Marinero no activo'], Response::HTTP_FORBIDDEN);
+                return $this->json(['error' => 'Empleado del club no activo'], Response::HTTP_FORBIDDEN);
             }
 
             $existing = $this->usuarios->findByUsername($user);
@@ -74,7 +74,7 @@ final class EmpleadoAuthController extends AbstractController
             $usuarioId = $this->usuarios->ensureUser(
                 $user,
                 $this->usuarios->hashPassword($pass),
-                'empleado',
+                ($marinero['rol'] ?? '') === 'admin' ? 'admin' : 'empleado',
                 null,
                 (int) $marinero['id'],
             );
@@ -135,11 +135,11 @@ final class EmpleadoAuthController extends AbstractController
             $marinero = null;
             if (!empty($row['marinero_id'])) {
                 $marinero = $this->connection->fetchAssociative(
-                    'SELECT id, nombre, apellido, email, estado FROM cnb_app.marineros WHERE id = ?',
+                    'SELECT id, nombre, apellido, email, estado, rol FROM cnb_app.personal_cnb WHERE id = ?',
                     [(int) $row['marinero_id']]
                 );
                 if ($marinero && ($marinero['estado'] ?? '') !== 'activo') {
-                    return $this->json(['error' => 'Marinero no activo'], Response::HTTP_FORBIDDEN);
+                    return $this->json(['error' => 'Empleado del club no activo'], Response::HTTP_FORBIDDEN);
                 }
             }
 
@@ -386,7 +386,7 @@ final class EmpleadoAuthController extends AbstractController
         $marinero = null;
         if (!empty($user['marinero_id'])) {
             $marinero = $this->connection->fetchAssociative(
-                'SELECT id, nombre, apellido, email, estado FROM cnb_app.marineros WHERE id = ?',
+                'SELECT id, nombre, apellido, email, estado, rol FROM cnb_app.personal_cnb WHERE id = ?',
                 [(int) $user['marinero_id']]
             );
         }
@@ -468,10 +468,12 @@ final class EmpleadoAuthController extends AbstractController
             'nombre' => $marinero['nombre'] ?? null,
             'apellido' => $marinero['apellido'] ?? null,
             'email' => $marinero['email'] ?? $username,
+            'rol_personal' => $marinero['rol'] ?? null,
             'perfil' => $this->usuarios->perfil([
                 'username' => $username,
                 'rol' => $rol,
                 'marinero_id' => $marinero['id'] ?? null,
+                'rol_personal' => $marinero['rol'] ?? null,
             ]),
         ];
     }

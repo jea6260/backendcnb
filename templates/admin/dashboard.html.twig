@@ -19,7 +19,7 @@
         <div class="card shadow-sm mb-4" id="personal">
             <div class="card-body">
                 <h2 class="h5">Personal del club</h2>
-                <p class="text-muted">La cuenta sirve en la web y en la app. El marinero tiene que existir antes en el padrón, con este mismo mail. Solo administración puede crear un operador.</p>
+                <p class="text-muted">La cuenta sirve en la web y en la app. El empleado del club tiene que existir antes en el padrón, con este mismo mail. El rol queda en ese padrón. Solo administración puede crear un admin o a operaciones.</p>
                 <form method="post" action="{{ path('admin_personal') }}" class="row g-2 align-items-end">
                     <div class="col-12 col-md-4">
                         <label class="form-label" for="personal-email">Mail</label>
@@ -30,12 +30,14 @@
                         <input class="form-control" id="personal-password" name="password" type="text" minlength="8" required>
                     </div>
                     <div class="col-12 col-md-3">
-                        <label class="form-label" for="personal-perfil">Perfil</label>
+                        <label class="form-label" for="personal-perfil">Rol</label>
                         <select class="form-select" id="personal-perfil" name="perfil">
                             {% if perfil in ['administrador', 'superuser'] %}
-                                <option value="operador">Operador</option>
+                                <option value="admin">Admin</option>
+                                <option value="operaciones">Operaciones</option>
                             {% endif %}
                             <option value="marinero">Marinero</option>
+                            <option value="guardia">Guardia</option>
                         </select>
                     </div>
                     <div class="col-12 col-md-2">

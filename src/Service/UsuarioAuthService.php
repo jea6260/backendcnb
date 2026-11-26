@@ -292,19 +292,23 @@ final class UsuarioAuthService
         }
 
         $rol = (string) ($user['rol'] ?? '');
-        if ($rol === 'admin') {
-            return 'administrador';
-        }
         if ($rol === 'socio') {
             return 'socio';
         }
 
-        $marineroId = $user['marinero_id'] ?? null;
-        if ($marineroId !== null && $marineroId !== '' && (int) $marineroId > 0) {
-            return 'marinero';
+        $rolPersonal = isset($user['rol_personal']) ? (string) $user['rol_personal'] : '';
+        $personalId = $user['marinero_id'] ?? null;
+        if ($rolPersonal === '' && $personalId !== null && $personalId !== '' && (int) $personalId > 0) {
+            $rolPersonal = $this->rolPersonal((int) $personalId) ?? '';
         }
 
-        return 'operador';
+        return match ($rolPersonal) {
+            'admin' => 'administrador',
+            'operaciones', 'operador' => 'operador',
+            'guardia' => 'guardia',
+            'marinero' => 'marinero',
+            default => $rol === 'admin' ? 'administrador' : 'operador',
+        };
     }
 
     /**
@@ -324,7 +328,7 @@ final class UsuarioAuthService
 
             return ['ver' => $ok, 'editar' => $ok, 'borrar' => $ok, 'crear' => $ok];
         }
-        if ($perfil === 'marinero') {
+        if (in_array($perfil, ['marinero', 'guardia'], true)) {
             $esTarea = in_array($resource, $tareas, true);
 
             return [
@@ -339,22 +343,24 @@ final class UsuarioAuthService
     }
 
     /**
-     * Alta de personal del club. El marinero tiene que existir ya en el padron, con el mismo mail.
+     * Alta de un empleado del club. La persona tiene que existir en personal_cnb, con el mismo mail.
+     * El rol de esa fila queda en admin, marinero, operaciones o guardia.
      *
      * @return string|null mensaje de error
      */
     public function crearPersonal(string $email, string $password, string $perfil, string $actorPerfil): ?string
     {
         $email = strtolower(trim($email));
+        $perfil = $perfil === 'operador' ? 'operaciones' : $perfil;
         $actor = $actorPerfil === 'superuser' ? 'administrador' : $actorPerfil;
         if (!in_array($actor, ['administrador', 'operador'], true)) {
             return 'Solo administración u operaciones pueden dar de alta personal.';
         }
-        if ($perfil === 'operador' && $actor !== 'administrador') {
-            return 'Solo administración puede dar de alta un operador.';
+        if (in_array($perfil, ['admin', 'operaciones'], true) && $actor !== 'administrador') {
+            return 'Solo administración puede dar de alta un admin o a operaciones.';
         }
-        if (!in_array($perfil, ['operador', 'marinero'], true)) {
-            return 'El perfil debe ser operador o marinero.';
+        if (!in_array($perfil, ['admin', 'marinero', 'operaciones', 'guardia'], true)) {
+            return 'El rol debe ser admin, marinero, operaciones o guardia.';
         }
         if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || strlen($password) < 8) {
             return 'Mail invalido o clave de menos de 8 caracteres.';
@@ -363,32 +369,54 @@ final class UsuarioAuthService
             return 'Ese mail ya tiene usuario.';
         }
 
-        $rol = 'empleado';
-        $marineroId = null;
-        if ($perfil === 'marinero') {
-            try {
-                $marinero = $this->connection->fetchAssociative(
-                    'SELECT id, estado FROM cnb_app.marineros WHERE LOWER(email) = LOWER(?) ORDER BY id LIMIT 1',
-                    [$email]
-                );
-            } catch (DbalException $exception) {
-                if ($this->isMissingRelation($exception)) {
-                    return 'Falta la tabla de marineros.';
-                }
-                throw $exception;
+        try {
+            $persona = $this->connection->fetchAssociative(
+                'SELECT id, estado, rol FROM cnb_app.personal_cnb WHERE LOWER(email) = LOWER(?) ORDER BY id LIMIT 1',
+                [$email]
+            );
+        } catch (DbalException $exception) {
+            if ($this->isMissingRelation($exception)) {
+                return 'Falta la tabla de personal del club.';
             }
-            if (!$marinero) {
-                return 'No hay un marinero activo con ese email. Carguelo en el padron antes de crear el usuario.';
-            }
-            if (($marinero['estado'] ?? '') !== 'activo') {
-                return 'Marinero no activo';
-            }
-            $marineroId = (int) $marinero['id'];
+            throw $exception;
+        }
+        if (!$persona) {
+            return 'No hay un empleado del club activo con ese email. Carguelo en el padron antes de crear el usuario.';
+        }
+        if (($persona['estado'] ?? '') !== 'activo') {
+            return 'Empleado del club no activo';
+        }
+        $actual = (string) ($persona['rol'] ?? '');
+        if (in_array($actual, ['admin', 'operaciones'], true) && $actor !== 'administrador' && $actual !== $perfil) {
+            return 'Solo administración puede cambiar ese rol.';
         }
 
-        $id = $this->ensureUser($email, $this->hashPassword($password), $rol, null, $marineroId, true);
+        $this->connection->update('cnb_app.personal_cnb', [
+            'rol' => $perfil,
+            'updated_at' => date('c'),
+        ], ['id' => (int) $persona['id']]);
+
+        $rolCuenta = $perfil === 'admin' ? 'admin' : 'empleado';
+        $id = $this->ensureUser($email, $this->hashPassword($password), $rolCuenta, null, (int) $persona['id'], true);
 
         return $id === null ? 'No se pudo crear el usuario.' : null;
+    }
+
+    private function rolPersonal(int $id): ?string
+    {
+        try {
+            $rol = $this->connection->fetchOne(
+                'SELECT rol FROM cnb_app.personal_cnb WHERE id = ?',
+                [$id]
+            );
+        } catch (DbalException $exception) {
+            if ($this->isMissingRelation($exception)) {
+                return null;
+            }
+            throw $exception;
+        }
+
+        return is_string($rol) && $rol !== '' ? $rol : null;
     }
 
     /**
@@ -499,7 +527,7 @@ final class UsuarioAuthService
         if ($marineroId !== null && $marineroId !== '' && (int) $marineroId > 0) {
             try {
                 $row = $this->connection->fetchAssociative(
-                    'SELECT nombre, apellido FROM cnb_app.marineros WHERE id = ?',
+                    'SELECT nombre, apellido FROM cnb_app.personal_cnb WHERE id = ?',
                     [(int) $marineroId]
                 );
             } catch (DbalException) {

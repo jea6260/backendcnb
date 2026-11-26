@@ -29,7 +29,7 @@ ALTER TABLE socios
     ADD COLUMN IF NOT EXISTS fecha_ingreso DATE;
 
 COMMENT ON COLUMN socios.fecha_ingreso IS
-    'Fecha de ingreso al club. Si está vacía, la antigüedad usa created_at.';
+    'Fecha de ingreso al club. Define la antigüedad para amarra, ampliación y el resto de las listas.';
 
 CREATE TABLE IF NOT EXISTS solicitudes_amarra (
     id BIGSERIAL PRIMARY KEY,

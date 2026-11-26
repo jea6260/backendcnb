@@ -6,7 +6,7 @@ use Doctrine\DBAL\Connection;
 
 /**
  * Solicitudes de amarra. Hasta 23 pies puede ir a tierra; más eslora va a agua.
- * La prioridad sale de los m2 disponibles y de la antigüedad del socio.
+ * La prioridad sale de los m2 disponibles y de socios.fecha_ingreso.
  */
 final class AmarraService
 {
@@ -43,7 +43,8 @@ final class AmarraService
      */
     public function lista(?int $soloSocio = null): array
     {
-        $sql = "SELECT s.id, s.numero_socio, s.modalidad, s.fecha_solicitud, s.fecha_ingreso_socio,
+        $sql = "SELECT s.id, s.numero_socio, s.modalidad, s.fecha_solicitud,
+                       so.fecha_ingreso AS fecha_ingreso_socio,
                        s.destino_solicitado, s.destino_disponible, s.m2_necesarios, s.m2_disponibles,
                        s.estado, s.observaciones, s.embarcacion_id, s.tipo_embarcacion_id,
                        trim(so.nombre || ' ' || so.apellido) AS socio,
@@ -63,7 +64,7 @@ final class AmarraService
                              AND s.destino_disponible = s.destino_solicitado THEN 1
                         ELSE 2
                     END,
-                    s.fecha_ingreso_socio NULLS LAST,
+                    so.fecha_ingreso NULLS LAST,
                     s.fecha_solicitud,
                     s.id";
 
@@ -141,7 +142,7 @@ final class AmarraService
         }
 
         $ingreso = $this->connection->fetchOne(
-            'SELECT COALESCE(fecha_ingreso, created_at::date) FROM cnb_app.socios WHERE numero_socio = ?',
+            'SELECT fecha_ingreso FROM cnb_app.socios WHERE numero_socio = ?',
             [$numeroSocio]
         );
 

@@ -733,6 +733,7 @@ final class AdminController extends AbstractController
             'sort' => in_array($sort, $this->registry->listableColumns($definition), true) ? $sort : $pk,
             'dir' => strtolower($dir) === 'asc' ? 'asc' : 'desc',
             'filters' => $filters,
+            'vista' => (string) $request->query->get('vista', ''),
             'puede_editar' => $permiso['editar'],
             'puede_borrar' => $permiso['borrar'],
             'puede_crear' => $permiso['crear'],

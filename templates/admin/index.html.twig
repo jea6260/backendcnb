@@ -18,10 +18,76 @@
         </div>
     </div>
 
-    <form id="cnb-list-filters" method="get" action="{{ path('admin_resource_index', {resource: resource}) }}">
-        <input type="hidden" name="sort" value="{{ sort }}">
-        <input type="hidden" name="dir" value="{{ dir }}">
-    </form>
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <h2 class="h6 mb-3">Filtros</h2>
+            <form method="get" action="{{ path('admin_resource_index', {resource: resource}) }}">
+                <input type="hidden" name="sort" value="{{ sort }}">
+                <input type="hidden" name="dir" value="{{ dir }}">
+                {% if vista %}
+                    <input type="hidden" name="vista" value="{{ vista }}">
+                {% endif %}
+                <div class="row g-2 align-items-end">
+                    {% for name, field in fields %}
+                        {% if field.type != 'image' %}
+                            <div class="col-12 col-md-4 col-xl-3">
+                                <label class="form-label small mb-1" for="filtro-{{ name }}">{{ field.label }}</label>
+                                {% if field.type == 'choice' %}
+                                    <select class="form-select form-select-sm" id="filtro-{{ name }}" name="f[{{ name }}]">
+                                        {% if definition.list_scope.column|default('') == name %}
+                                            <option value="__operativos" {{ filters[name]|default('__operativos') == '__operativos' ? 'selected' : '' }}>Sin baja, menor ni ausente</option>
+                                            <option value="__todos" {{ filters[name]|default('') == '__todos' ? 'selected' : '' }}>Todos</option>
+                                        {% else %}
+                                            <option value="">Todos</option>
+                                        {% endif %}
+                                        {% for code, label in field.choices %}
+                                            <option value="{{ code }}" {{ filters[name]|default('') == code ? 'selected' : '' }}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                {% elseif field.type == 'boolean' %}
+                                    <select class="form-select form-select-sm" id="filtro-{{ name }}" name="f[{{ name }}]">
+                                        <option value="">Todos</option>
+                                        <option value="si" {{ filters[name]|default('') == 'si' ? 'selected' : '' }}>Sí</option>
+                                        <option value="no" {{ filters[name]|default('') == 'no' ? 'selected' : '' }}>No</option>
+                                    </select>
+                                {% else %}
+                                    <input
+                                        class="form-control form-control-sm"
+                                        id="filtro-{{ name }}"
+                                        type="search"
+                                        name="f[{{ name }}]"
+                                        value="{{ filters[name]|default('') }}"
+                                        placeholder="Contiene…"
+                                    >
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                    {% if definition.list_scope.via is defined %}
+                        <div class="col-12 col-md-4 col-xl-3">
+                            <label class="form-label small mb-1" for="filtro-socio-estado">Estado del socio</label>
+                            <select class="form-select form-select-sm" id="filtro-socio-estado" name="f[socio_estado]">
+                                <option value="__operativos" {{ filters.socio_estado|default('__operativos') == '__operativos' ? 'selected' : '' }}>Sin baja, menor ni ausente</option>
+                                <option value="__todos" {{ filters.socio_estado|default('') == '__todos' ? 'selected' : '' }}>Todos</option>
+                                {% for code, label in definition.list_scope.choices %}
+                                    <option value="{{ code }}" {{ filters.socio_estado|default('') == code ? 'selected' : '' }}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    {% endif %}
+                    <div class="col-12 col-md-auto d-flex gap-2">
+                        <button class="btn btn-sm btn-primary" type="submit">Buscar</button>
+                        <a class="btn btn-sm btn-outline-secondary" href="{{ path('admin_resource_index', {resource: resource, vista: vista ?: null}) }}">Limpiar</a>
+                    </div>
+                </div>
+                {% if definition.list_scope is defined %}
+                    <p class="form-text mb-0 mt-2">Al entrar no se listan baja, menor ni ausente. Los filtros se combinan.</p>
+                {% else %}
+                    <p class="form-text mb-0 mt-2">Los filtros se combinan.</p>
+                {% endif %}
+            </form>
+        </div>
+    </div>
 
     <div class="card shadow-sm">
         <div class="table-responsive">
@@ -49,40 +115,6 @@
                             </th>
                         {% endfor %}
                         <th class="text-end">Acciones</th>
-                    </tr>
-                    <tr class="cnb-filter-row">
-                        {% if show_id %}
-                            <th>
-                                <input
-                                    form="cnb-list-filters"
-                                    class="form-control form-control-sm"
-                                    type="search"
-                                    name="f[id]"
-                                    value="{{ filters.id|default('') }}"
-                                    placeholder="Buscar ID"
-                                    aria-label="Buscar por ID"
-                                >
-                            </th>
-                        {% endif %}
-                        {% for name, field in fields %}
-                            <th>
-                                <input
-                                    form="cnb-list-filters"
-                                    class="form-control form-control-sm"
-                                    type="search"
-                                    name="f[{{ name }}]"
-                                    value="{{ filters[name]|default('') }}"
-                                    placeholder="Buscar {{ field.label|lower }}"
-                                    aria-label="Buscar por {{ field.label }}"
-                                >
-                            </th>
-                        {% endfor %}
-                        <th class="text-end">
-                            <div class="d-flex justify-content-end gap-1">
-                                <button form="cnb-list-filters" class="btn btn-sm btn-primary" type="submit">Buscar</button>
-                                <a class="btn btn-sm btn-outline-secondary" href="{{ path('admin_resource_index', {resource: resource}) }}">Limpiar</a>
-                            </div>
-                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -145,6 +177,6 @@
     </div>
 
     {% if rows is not empty %}
-        <p class="text-muted small mt-2 mb-0">Mostrando hasta 300 registros. Haga clic en el nombre de una columna para ordenar.</p>
+        <p class="text-muted small mt-2 mb-0">Mostrando hasta 500 registros. Haga clic en el nombre de una columna para ordenar.</p>
     {% endif %}
 {% endblock %}

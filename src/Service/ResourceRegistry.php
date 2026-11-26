@@ -2,12 +2,18 @@
 
 namespace App\Service;
 
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 final class ResourceRegistry
 {
     private const SCHEMA = 'cnb_app';
+
+    private const SOCIO_LABEL = "concat_ws(', ', NULLIF(btrim(apellido), ''), NULLIF(btrim(nombre), '')) || ' #' || numero_socio";
+
+    /** @var list<string> */
+    private const SOCIOS_OCULTOS = ['BA', 'MR', 'AE', 'baja', 'suspendido'];
 
     /**
      * @return array<string, array<string, mixed>>
@@ -22,6 +28,10 @@ final class ResourceRegistry
                 'description' => 'Padron de socios y estado administrativo.',
                 'primary_key' => 'numero_socio',
                 'list_id' => false,
+                'list_scope' => [
+                    'column' => 'estado',
+                    'exclude' => self::SOCIOS_OCULTOS,
+                ],
                 'fields' => [
                     'numero_socio' => ['label' => 'Numero de socio', 'type' => 'integer', 'required' => true, 'list' => true, 'primary' => true],
                     'nombre' => ['label' => 'Nombre', 'type' => 'text', 'required' => true, 'list' => true],
@@ -55,8 +65,26 @@ final class ResourceRegistry
                 'label' => 'Socios ↔ Embarcaciones',
                 'singular' => 'Vinculo socio-embarcacion',
                 'description' => 'Un socio puede tener varias embarcaciones y una embarcacion varios socios.',
+                'list_scope' => [
+                    'via' => [
+                        'column' => 'numero_socio',
+                        'table' => 'cnb_app.socios',
+                        'key' => 'numero_socio',
+                        'estado' => 'estado',
+                    ],
+                    'exclude' => self::SOCIOS_OCULTOS,
+                    'choices' => [
+                        'AO' => 'Activo',
+                        'AA' => 'Conyuge',
+                        'VO' => 'Vitalicio',
+                        'HO' => 'Honorario',
+                        'MR' => 'Menor',
+                        'AE' => 'Ausente',
+                        'BA' => 'Baja',
+                    ],
+                ],
                 'fields' => [
-                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL]],
                     'embarcacion_id' => ['label' => 'Embarcacion', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'embarcaciones', 'label' => "nombre || COALESCE(' - ' || matricula, '')"]],
                     'rol' => ['label' => 'Rol', 'type' => 'choice', 'required' => true, 'default' => 'titular', 'list' => true, 'choices' => [
                         'titular' => 'Titular',
@@ -104,7 +132,7 @@ final class ResourceRegistry
                         'type' => 'relation',
                         'list' => true,
                         'help' => 'Preferir vinculos en Socios ↔ Embarcaciones. Se mantiene por compatibilidad.',
-                        'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"],
+                        'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL],
                     ],
                     'tipo' => ['label' => 'Tipo', 'type' => 'text', 'required' => true, 'default' => 'velero', 'list' => true],
                     'modelo' => ['label' => 'Modelo', 'type' => 'text', 'list' => true],
@@ -219,7 +247,7 @@ final class ResourceRegistry
                 'singular' => 'Reserva de varadero',
                 'description' => 'El socio pide (pendiente). El operador confirma. El marinero marca la entrada y la vuelta a la amarra, que libera el lugar. Cupo de 15 dias por año.',
                 'fields' => [
-                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL]],
                     'embarcacion_id' => ['label' => 'Embarcacion', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'embarcaciones', 'label' => "nombre || COALESCE(' - ' || matricula, '')"]],
                     'espacio_id' => ['label' => 'Espacio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'espacios_varadero', 'label' => "codigo || ' (' || eslora_max_m || 'm)'"]],
                     'fecha_inicio' => ['label' => 'Fecha inicio', 'type' => 'date', 'required' => true, 'list' => true],
@@ -268,7 +296,7 @@ final class ResourceRegistry
                         'cancelada' => 'Cancelada',
                     ]],
                     'progreso' => ['label' => 'Progreso %', 'type' => 'integer', 'default' => 0, 'list' => true],
-                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL]],
                     'embarcacion_id' => ['label' => 'Embarcacion', 'type' => 'relation', 'relation' => ['table' => 'embarcaciones', 'label' => "nombre || COALESCE(' - ' || matricula, '')"]],
                     'reserva_varadero_id' => ['label' => 'Reserva varadero', 'type' => 'relation', 'relation' => ['table' => 'reservas_varadero', 'label' => "'Reserva #' || id || ' ' || fecha_inicio || ' a ' || fecha_fin"]],
                     'vehiculo_id' => ['label' => 'Vehiculo', 'type' => 'relation', 'relation' => ['table' => 'vehiculos', 'label' => "nombre || ' - ' || tipo"]],
@@ -341,7 +369,7 @@ final class ResourceRegistry
                 'singular' => 'Acceso socio',
                 'description' => 'Credenciales de portal para socios.',
                 'fields' => [
-                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => "apellido || ', ' || nombre || ' #' || numero_socio"]],
+                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL]],
                     'email' => ['label' => 'Email login', 'type' => 'email', 'required' => true, 'list' => true],
                     'password_hash' => ['label' => 'Hash clave', 'type' => 'text', 'required' => true],
                     'biometric_habilitado' => ['label' => 'Biometria', 'type' => 'boolean', 'default' => false, 'list' => true],
@@ -471,15 +499,41 @@ final class ResourceRegistry
             ->select('t.*')
             ->from($definition['table'], 't')
             ->orderBy('t.'.$sort, $direction)
-            ->setMaxResults(300);
+            ->setMaxResults(500);
+
+        $this->applyListScope($query, $definition, $filters);
 
         foreach ($filters as $column => $value) {
             $value = trim($value);
-            if ($value === '' || !in_array($column, $columns, true)) {
+            if ($value === '' || $value === '__operativos' || $value === '__todos' || !in_array($column, $columns, true)) {
                 continue;
             }
 
+            $field = $definition['fields'][$column] ?? null;
             $parameter = 'filter_'.$column;
+            $type = is_array($field) ? (string) ($field['type'] ?? 'text') : 'text';
+
+            if ($type === 'choice' && isset($field['choices'][$value])) {
+                $query->andWhere(sprintf('t.%s = :%s', $column, $parameter))
+                    ->setParameter($parameter, $value);
+                continue;
+            }
+
+            if ($type === 'boolean') {
+                $query->andWhere(sprintf('t.%s = :%s', $column, $parameter))
+                    ->setParameter($parameter, in_array(strtolower($value), ['1', 'si', 'sí', 'true'], true) ? 'true' : 'false');
+                continue;
+            }
+
+            if ($type === 'relation' && is_array($field)) {
+                $this->applyRelationFilter($query, $column, $field, $parameter, $value);
+                continue;
+            }
+
+            if ($type === 'image') {
+                continue;
+            }
+
             $query
                 ->andWhere(sprintf('CAST(t.%s AS TEXT) ILIKE :%s', $column, $parameter))
                 ->setParameter($parameter, '%'.$this->escapeLike($value).'%');
@@ -494,6 +548,85 @@ final class ResourceRegistry
     private function escapeLike(string $value): string
     {
         return addcslashes($value, '%_\\');
+    }
+
+    /**
+     * @param array<string, mixed> $definition
+     * @param array<string, string> $filters
+     */
+    private function applyListScope(\Doctrine\DBAL\Query\QueryBuilder $query, array $definition, array $filters): void
+    {
+        $scope = $definition['list_scope'] ?? null;
+        if (!is_array($scope) || !isset($scope['exclude']) || !is_array($scope['exclude'])) {
+            return;
+        }
+
+        if (isset($scope['column'])) {
+            $column = (string) $scope['column'];
+            $chosen = $filters[$column] ?? '';
+            if ($chosen === '__todos' || ($chosen !== '' && $chosen !== '__operativos')) {
+                return;
+            }
+            $query->andWhere(sprintf('t.%s NOT IN (:scope_exclude)', $column))
+                ->setParameter('scope_exclude', array_values($scope['exclude']), ArrayParameterType::STRING);
+
+            return;
+        }
+
+        $via = $scope['via'] ?? null;
+        if (!is_array($via)) {
+            return;
+        }
+
+        $chosen = $filters['socio_estado'] ?? '';
+        if ($chosen === '__todos') {
+            return;
+        }
+        if ($chosen !== '' && $chosen !== '__operativos') {
+            $query->andWhere(sprintf(
+                'EXISTS (SELECT 1 FROM %s s WHERE s.%s = t.%s AND s.%s = :socio_estado_exacto)',
+                $via['table'],
+                $via['key'],
+                $via['column'],
+                $via['estado']
+            ))->setParameter('socio_estado_exacto', $chosen);
+
+            return;
+        }
+
+        $query->andWhere(sprintf(
+            'EXISTS (SELECT 1 FROM %s s WHERE s.%s = t.%s AND s.%s NOT IN (:scope_exclude))',
+            $via['table'],
+            $via['key'],
+            $via['column'],
+            $via['estado']
+        ))->setParameter('scope_exclude', array_values($scope['exclude']), ArrayParameterType::STRING);
+    }
+
+    /**
+     * @param array<string, mixed> $field
+     */
+    private function applyRelationFilter(
+        \Doctrine\DBAL\Query\QueryBuilder $query,
+        string $column,
+        array $field,
+        string $parameter,
+        string $value,
+    ): void {
+        $relation = $field['relation'];
+        $key = $relation['key'] ?? 'id';
+        $query->andWhere(sprintf(
+            'EXISTS (SELECT 1 FROM %s rel WHERE rel.%s = t.%s AND (CAST(rel.%s AS TEXT) ILIKE :%s OR CAST((%s) AS TEXT) ILIKE :%s_label))',
+            $relation['table'],
+            $key,
+            $column,
+            $key,
+            $parameter,
+            $relation['label'],
+            $parameter
+        ))
+            ->setParameter($parameter, '%'.$this->escapeLike($value).'%')
+            ->setParameter($parameter.'_label', '%'.$this->escapeLike($value).'%');
     }
 
     /**
@@ -570,6 +703,42 @@ final class ResourceRegistry
      * @param array<string, mixed> $field
      * @return array<int, array{id: mixed, label: string}>
      */
+    /**
+     * @param array<string, mixed> $field
+     * @param list<mixed> $ids
+     * @return array<string, string>
+     */
+    private function relationLabels(Connection $connection, array $field, array $ids): array
+    {
+        $relation = $field['relation'];
+        $key = $relation['key'] ?? 'id';
+        $ids = array_values(array_unique(array_map(static fn (mixed $id): string => (string) $id, $ids)));
+        if ($ids === []) {
+            return [];
+        }
+
+        $numeric = array_reduce($ids, static fn (bool $ok, string $id): bool => $ok && ctype_digit($id), true);
+        $sql = sprintf(
+            'SELECT %s AS id, %s AS label FROM %s WHERE %s IN (?)',
+            $key,
+            $relation['label'],
+            $relation['table'],
+            $key
+        );
+        $rows = $connection->fetchAllAssociative(
+            $sql,
+            [$numeric ? array_map('intval', $ids) : $ids],
+            [$numeric ? ArrayParameterType::INTEGER : ArrayParameterType::STRING]
+        );
+
+        $map = [];
+        foreach ($rows as $row) {
+            $map[(string) $row['id']] = (string) ($row['label'] ?? '');
+        }
+
+        return $map;
+    }
+
     public function relationOptions(Connection $connection, array $field): array
     {
         if (($field['type'] ?? null) !== 'relation') {
@@ -611,13 +780,14 @@ final class ResourceRegistry
                 continue;
             }
 
-            // En listado mostrar tambien inactivos si ya estan referenciados.
-            $fieldForMap = $field;
-            unset($fieldForMap['relation']['active_only']);
-            $map = [];
-            foreach ($this->relationOptions($connection, $fieldForMap) as $option) {
-                $map[(string) $option['id']] = $option['label'];
+            $ids = [];
+            foreach ($rows as $row) {
+                $raw = $row[$column] ?? null;
+                if ($raw !== null && $raw !== '') {
+                    $ids[] = $raw;
+                }
             }
+            $map = $this->relationLabels($connection, $field, $ids);
 
             foreach ($rows as &$row) {
                 $raw = $row[$column] ?? null;

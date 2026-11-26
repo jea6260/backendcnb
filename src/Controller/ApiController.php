@@ -278,6 +278,31 @@ final class ApiController extends AbstractController
         return $this->rowResponse($definition, $id);
     }
 
+    #[Route('/reservas-varadero/{id}/extension', name: 'api_varadero_extension', requirements: ['id' => '\d+'], priority: 30, methods: ['POST'])]
+    public function resolverExtensionVaradero(int $id, Request $request): JsonResponse
+    {
+        $actor = $this->actor($request);
+        if ($actor instanceof JsonResponse) {
+            return $actor;
+        }
+
+        $data = $this->jsonBody($request);
+        try {
+            $resultado = $this->varadero->resolverExtension(
+                $id,
+                (string) ($data['decision'] ?? '') === 'aprobar',
+                (string) $actor['perfil'],
+            );
+        } catch (DbalException $exception) {
+            return $this->dbalError($exception);
+        }
+        if (!$resultado['ok']) {
+            return $this->json(['error' => $resultado['error']], $resultado['status']);
+        }
+
+        return $this->json(['data' => ['id' => $id, 'decision' => (string) ($data['decision'] ?? '')]]);
+    }
+
     #[Route('/{resource}/{id}', name: 'api_resource_update', requirements: ['resource' => '(?!socio$)[a-z-]+', 'id' => '[^/]+'], methods: ['PATCH', 'PUT'])]
     public function update(string $resource, string $id, Request $request): JsonResponse
     {
@@ -297,7 +322,15 @@ final class ApiController extends AbstractController
                 if ($actor instanceof JsonResponse) {
                     return $actor;
                 }
-                $paso = $this->varadero->transicionar((int) $id, (string) $payload['estado'], $actor['perfil']);
+                $body = $this->jsonBody($request);
+                $paso = $this->varadero->transicionar(
+                    (int) $id,
+                    (string) $payload['estado'],
+                    $actor['perfil'],
+                    isset($body['destino']) ? (string) $body['destino'] : null,
+                    isset($actor['id']) ? (int) $actor['id'] : null,
+                    isset($actor['username']) ? (string) $actor['username'] : null,
+                );
                 if (!$paso['ok']) {
                     return $this->json(['error' => $paso['error']], $paso['status']);
                 }
@@ -408,7 +441,11 @@ final class ApiController extends AbstractController
             return $this->json(['error' => 'Token requerido'], Response::HTTP_UNAUTHORIZED);
         }
 
-        return ['perfil' => $this->usuarios->perfil($user)];
+        return [
+            'id' => (int) $user['id'],
+            'username' => (string) $user['username'],
+            'perfil' => $this->usuarios->perfil($user),
+        ];
     }
 
     private function requireEmpleadoIfSensitive(Request $request, string $resource): ?JsonResponse

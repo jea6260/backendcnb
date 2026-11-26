@@ -53,6 +53,8 @@ final class AmarraMailer
             'Fecha de ingreso: '.($fila['fecha_ingreso_socio'] ?? ''),
             'Modalidad: '.($fila['modalidad'] ?? ''),
             'Embarcación: '.($fila['embarcacion'] ?? ''),
+            'Metros comprados: '.($fila['metros_comprados'] ?? ''),
+            'Compra o cambio de embarcación: '.(!empty($fila['cambio_embarcacion']) ? 'sí' : 'no'),
             'Tipo: '.($fila['tipo_nombre'] ?? ''),
             'Destino solicitado: '.($fila['destino_solicitado'] ?? ''),
             'Según eslora: '.($fila['destino_por_eslora'] ?? 'sin medida'),

@@ -15,6 +15,7 @@ final class VaraderoService
     public function __construct(
         private readonly Connection $connection,
         private readonly ResourceRegistry $registry,
+        private readonly MovimientoService $movimientos,
     ) {
     }
 
@@ -25,7 +26,7 @@ final class VaraderoService
      */
     public function embarcacionesDeSocio(int $numeroSocio, bool $soloActivas = true): array
     {
-        $sql = "SELECT DISTINCT e.id, e.nombre, e.matricula, e.eslora_m, e.estado, e.ambito, e.tipo, e.modelo,
+        $sql = "SELECT DISTINCT e.id, e.nombre, e.matricula, e.eslora_m, e.metros_comprados, e.estado, e.ambito, e.tipo, e.modelo,
                        e.ubicacion_id, u.nombre AS ubicacion, e.estado_padron_id, ep.nombre AS estado_padron,
                        se.rol AS vinculo_rol
                 FROM cnb_app.embarcaciones e
@@ -46,7 +47,7 @@ final class VaraderoService
 
         // Fallback legacy: si la tabla M2M no tiene filas aun, usar embarcaciones.numero_socio
         if ($rows === []) {
-            $legacySql = "SELECT e.id, e.nombre, e.matricula, e.eslora_m, e.estado, e.ambito, e.tipo, e.modelo,
+            $legacySql = "SELECT e.id, e.nombre, e.matricula, e.eslora_m, e.metros_comprados, e.estado, e.ambito, e.tipo, e.modelo,
                                  e.ubicacion_id, u.nombre AS ubicacion, e.estado_padron_id, ep.nombre AS estado_padron,
                                  'titular' AS vinculo_rol
                           FROM cnb_app.embarcaciones e
@@ -85,6 +86,9 @@ final class VaraderoService
                     'label' => $label,
                     'eslora_m' => isset($row['eslora_m']) && $row['eslora_m'] !== null && $row['eslora_m'] !== ''
                         ? (float) $row['eslora_m']
+                        : null,
+                    'metros_comprados' => isset($row['metros_comprados']) && $row['metros_comprados'] !== null && $row['metros_comprados'] !== ''
+                        ? (float) $row['metros_comprados']
                         : null,
                     'estado' => $estado,
                     'ambito' => $row['ambito'] !== null ? (string) $row['ambito'] : null,
@@ -240,6 +244,7 @@ final class VaraderoService
         $reservas = $this->connection->fetchAllAssociative(
             "SELECT r.id, r.espacio_id, r.numero_socio, r.embarcacion_id,
                     r.fecha_inicio, r.fecha_fin, r.estado, r.motivo, r.observaciones,
+                    r.extension_estado, r.extension_hasta,
                     s.apellido AS socio_apellido, s.nombre AS socio_nombre,
                     e.nombre AS embarcacion_nombre, e.matricula AS embarcacion_matricula
              FROM cnb_app.reservas_varadero r
@@ -247,7 +252,7 @@ final class VaraderoService
              LEFT JOIN cnb_app.embarcaciones e ON e.id = r.embarcacion_id
              WHERE r.estado IN ('pendiente', 'confirmada', 'en_curso')
                AND r.fecha_inicio <= ?
-               AND r.fecha_fin >= ?
+               AND (r.fecha_fin >= ? OR r.estado = 'en_curso')
              ORDER BY r.fecha_inicio ASC",
             [$hasta, $desde]
         );
@@ -262,11 +267,17 @@ final class VaraderoService
                 $embarcacion .= ' - ' . $reserva['embarcacion_matricula'];
             }
 
+            $fin = substr((string) $reserva['fecha_fin'], 0, 10);
+            $semaforo = $this->semaforo($reserva);
+            $hoy = (new \DateTimeImmutable('today', new \DateTimeZone('America/Argentina/Buenos_Aires')))->format('Y-m-d');
             $byEspacio[$espacioId][] = [
                 'id' => (int) $reserva['id'],
                 'fecha_inicio' => substr((string) $reserva['fecha_inicio'], 0, 10),
-                'fecha_fin' => substr((string) $reserva['fecha_fin'], 0, 10),
+                'fecha_fin' => $fin,
+                'ocupa_hasta' => $semaforo['color'] !== null && $fin < $hoy ? $hoy : $fin,
                 'estado' => $reserva['estado'],
+                'semaforo' => $semaforo['color'],
+                'semaforo_etiqueta' => $semaforo['etiqueta'],
                 'motivo' => $reserva['motivo'],
                 'observaciones' => $reserva['observaciones'],
                 'numero_socio' => (int) $reserva['numero_socio'],
@@ -521,33 +532,264 @@ final class VaraderoService
     }
 
     /**
-     * Paso siguiente que este perfil puede dar. El socio no avanza estados.
+     * Pasos que este perfil puede dar. El socio no avanza estados.
+     * Al salir del varadero hay dos destinos: la amarra o el socio se lo lleva.
      *
-     * @return array{estado: string, etiqueta: string}|null
+     * @return list<array{estado: string, etiqueta: string, destino: string|null}>
      */
-    public function accionDisponible(string $perfil, string $estado): ?array
+    public function accionesDisponibles(string $perfil, string $estado): array
     {
-        $pasos = [
-            'pendiente' => ['confirmada', 'Confirmar y habilitar', ['operador', 'administrador', 'superuser']],
-            'confirmada' => ['en_curso', 'Barco en varadero', ['marinero', 'administrador', 'superuser']],
-            'en_curso' => ['finalizada', 'Volvió a la amarra', ['marinero', 'administrador', 'superuser']],
-        ];
-        $paso = $pasos[$estado] ?? null;
-        if ($paso === null || !in_array($perfil, $paso[2], true)) {
-            return null;
+        if ($estado === 'pendiente' && in_array($perfil, ['operador', 'administrador', 'superuser'], true)) {
+            return [['estado' => 'confirmada', 'etiqueta' => 'Confirmar y habilitar', 'destino' => null]];
+        }
+        if ($estado === 'confirmada' && in_array($perfil, ['marinero', 'administrador', 'superuser'], true)) {
+            return [['estado' => 'en_curso', 'etiqueta' => 'Barco entra a varadero', 'destino' => null]];
+        }
+        if ($estado === 'en_curso' && in_array($perfil, ['marinero', 'administrador', 'superuser'], true)) {
+            return [
+                ['estado' => 'finalizada', 'etiqueta' => 'Sale a su amarra', 'destino' => 'amarra'],
+                ['estado' => 'finalizada', 'etiqueta' => 'Se lo lleva el socio', 'destino' => 'socio'],
+            ];
         }
 
-        return ['estado' => $paso[0], 'etiqueta' => $paso[1]];
+        return [];
+    }
+
+    /**
+     * Verde: el turno iniciado sigue dentro de la fecha.
+     * Naranja: se venció y hay una extensión pedida.
+     * Rojo: se venció y nadie pidió extensión.
+     *
+     * @param array<string, mixed> $reserva
+     * @return array{color: string|null, codigo: string, etiqueta: string, detalle: string}
+     */
+    public function semaforo(array $reserva): array
+    {
+        $estado = (string) ($reserva['estado'] ?? '');
+        if ($estado !== 'en_curso') {
+            return [
+                'color' => null,
+                'codigo' => $estado,
+                'etiqueta' => $estado,
+                'detalle' => '',
+            ];
+        }
+
+        $hoy = (new \DateTimeImmutable('today', new \DateTimeZone('America/Argentina/Buenos_Aires')))->format('Y-m-d');
+        $fin = substr((string) ($reserva['fecha_fin'] ?? ''), 0, 10);
+        $extension = (string) ($reserva['extension_estado'] ?? '');
+        $hasta = substr((string) ($reserva['extension_hasta'] ?? ''), 0, 10);
+        if ($fin !== '' && $fin >= $hoy) {
+            return [
+                'color' => 'verde',
+                'codigo' => 'en_plazo',
+                'etiqueta' => 'En plazo',
+                'detalle' => 'El turno sigue dentro de la fecha prevista, hasta '.$fin.'.',
+            ];
+        }
+        if ($extension === 'pendiente') {
+            return [
+                'color' => 'naranja',
+                'codigo' => 'extension',
+                'etiqueta' => 'Extensión pedida',
+                'detalle' => 'El plazo se venció. Hay una extensión pedida'.($hasta !== '' ? ' hasta '.$hasta : '').'. La decide operaciones o administración.',
+            ];
+        }
+
+        return [
+            'color' => 'rojo',
+            'codigo' => 'vencido',
+            'etiqueta' => 'Vencido',
+            'detalle' => 'El plazo se venció el '.$fin.'. Pedí una extensión. Si no, el turno queda en rojo.',
+        ];
+    }
+
+    /**
+     * @return array{ok: true}|array{ok: false, error: string, status: int}
+     */
+    public function solicitarExtension(int $id, int $numeroSocio, string $fechaHasta): array
+    {
+        $reserva = $this->connection->fetchAssociative(
+            'SELECT id, numero_socio, espacio_id, estado, fecha_inicio, fecha_fin, extension_estado, observaciones
+             FROM cnb_app.reservas_varadero WHERE id = ?',
+            [$id]
+        );
+        if (!$reserva || (int) $reserva['numero_socio'] !== $numeroSocio) {
+            return ['ok' => false, 'error' => 'No se encontró el turno.', 'status' => 404];
+        }
+        if ((string) $reserva['estado'] !== 'en_curso') {
+            return ['ok' => false, 'error' => 'La extensión es para un turno que ya empezó.', 'status' => 400];
+        }
+        if ((string) ($reserva['extension_estado'] ?? '') === 'pendiente') {
+            return ['ok' => false, 'error' => 'Ya hay una extensión esperando que la decida operaciones.', 'status' => 409];
+        }
+        $semaforo = $this->semaforo($reserva);
+        if ($semaforo['codigo'] !== 'vencido') {
+            return ['ok' => false, 'error' => 'El turno todavía está en fecha. La extensión se pide cuando se vence.', 'status' => 400];
+        }
+
+        $chequeo = $this->validarNuevaFecha($reserva, $fechaHasta);
+        if (!$chequeo['ok']) {
+            return $chequeo;
+        }
+
+        $this->connection->update('cnb_app.reservas_varadero', [
+            'extension_estado' => 'pendiente',
+            'extension_hasta' => $chequeo['fecha'],
+            'observaciones' => $this->anotar($reserva, 'El socio pidió extensión hasta '.$chequeo['fecha'].'.'),
+        ], ['id' => $id]);
+
+        return ['ok' => true];
+    }
+
+    /**
+     * @return array{ok: true}|array{ok: false, error: string, status: int}
+     */
+    public function resolverExtension(int $id, bool $aprobar, string $perfil): array
+    {
+        if (!in_array($perfil, ['operador', 'administrador', 'superuser'], true)) {
+            return ['ok' => false, 'error' => 'La extensión la decide operaciones o administración.', 'status' => 403];
+        }
+        $reserva = $this->connection->fetchAssociative(
+            'SELECT id, numero_socio, espacio_id, estado, fecha_inicio, fecha_fin, extension_estado, extension_hasta, observaciones
+             FROM cnb_app.reservas_varadero WHERE id = ?',
+            [$id]
+        );
+        if (!$reserva) {
+            return ['ok' => false, 'error' => 'No se encontró el turno.', 'status' => 404];
+        }
+        if ((string) ($reserva['extension_estado'] ?? '') !== 'pendiente') {
+            return ['ok' => false, 'error' => 'No hay una extensión pendiente.', 'status' => 400];
+        }
+
+        if (!$aprobar) {
+            $this->connection->update('cnb_app.reservas_varadero', [
+                'extension_estado' => 'rechazada',
+                'observaciones' => $this->anotar($reserva, 'Operaciones rechazó la extensión. El turno sigue vencido.'),
+            ], ['id' => $id]);
+
+            return ['ok' => true];
+        }
+
+        $chequeo = $this->validarNuevaFecha($reserva, (string) $reserva['extension_hasta']);
+        if (!$chequeo['ok']) {
+            return $chequeo;
+        }
+        $this->connection->update('cnb_app.reservas_varadero', [
+            'fecha_fin' => $chequeo['fecha'],
+            'extension_estado' => 'aprobada',
+            'observaciones' => $this->anotar($reserva, 'Operaciones aprobó la extensión hasta '.$chequeo['fecha'].'.'),
+        ], ['id' => $id]);
+
+        return ['ok' => true];
+    }
+
+    /**
+     * @return array{ok: true}|array{ok: false, error: string, status: int}
+     */
+    public function cancelarPorSocio(int $id, int $numeroSocio): array
+    {
+        $reserva = $this->connection->fetchAssociative(
+            'SELECT id, numero_socio, estado, observaciones FROM cnb_app.reservas_varadero WHERE id = ?',
+            [$id]
+        );
+        if (!$reserva || (int) $reserva['numero_socio'] !== $numeroSocio) {
+            return ['ok' => false, 'error' => 'No se encontró el turno.', 'status' => 404];
+        }
+        if (!in_array((string) $reserva['estado'], ['pendiente', 'confirmada'], true)) {
+            return ['ok' => false, 'error' => 'El turno ya empezó. Lo siguen operaciones, administración y los marineros.', 'status' => 403];
+        }
+
+        $this->connection->update('cnb_app.reservas_varadero', [
+            'estado' => 'cancelada',
+            'observaciones' => $this->anotar($reserva, 'El socio dio de baja el turno antes de que empezara.'),
+        ], ['id' => $id]);
+
+        return ['ok' => true];
+    }
+
+    /**
+     * @param array<string, mixed> $reserva
+     * @return array{ok: true, fecha: string}|array{ok: false, error: string, status: int}
+     */
+    private function validarNuevaFecha(array $reserva, string $fechaHasta): array
+    {
+        try {
+            $inicio = new \DateTimeImmutable(substr((string) $reserva['fecha_inicio'], 0, 10));
+            $actual = new \DateTimeImmutable(substr((string) $reserva['fecha_fin'], 0, 10));
+            $nueva = new \DateTimeImmutable(substr($fechaHasta, 0, 10));
+        } catch (\Exception) {
+            return ['ok' => false, 'error' => 'La fecha de extensión no es válida.', 'status' => 400];
+        }
+        if ($nueva <= $actual) {
+            return ['ok' => false, 'error' => 'La extensión tiene que pasar la fecha prevista.', 'status' => 400];
+        }
+        $dias = (int) $inicio->diff($nueva)->days + 1;
+        if ($dias > self::DIAS_MAX_RESERVA) {
+            return ['ok' => false, 'error' => sprintf('El turno no puede superar %d días.', self::DIAS_MAX_RESERVA), 'status' => 400];
+        }
+        $extra = (int) $actual->diff($nueva)->days;
+        $anio = (int) $inicio->format('Y');
+        $usados = (int) $this->connection->fetchOne(
+            "SELECT COALESCE(SUM(cantidad_dias), 0)
+             FROM cnb_app.reservas_varadero
+             WHERE numero_socio = ?
+               AND estado IN ('pendiente', 'confirmada', 'en_curso', 'finalizada')
+               AND EXTRACT(YEAR FROM fecha_inicio) = ?",
+            [(int) $reserva['numero_socio'], $anio]
+        );
+        $restantes = self::DIAS_MAX_ANIO - $usados;
+        if ($extra > $restantes) {
+            return [
+                'ok' => false,
+                'error' => sprintf('Cupo anual insuficiente: quedan %d días.', max(0, $restantes)),
+                'status' => 400,
+            ];
+        }
+        $solape = $this->connection->fetchOne(
+            "SELECT id FROM cnb_app.reservas_varadero
+             WHERE espacio_id = ?
+               AND id <> ?
+               AND estado IN ('pendiente', 'confirmada', 'en_curso')
+               AND fecha_inicio <= ?
+               AND fecha_fin >= ?
+             LIMIT 1",
+            [(int) $reserva['espacio_id'], (int) $reserva['id'], $nueva->format('Y-m-d'), $actual->modify('+1 day')->format('Y-m-d')]
+        );
+        if ($solape) {
+            return ['ok' => false, 'error' => 'El espacio no está libre en esas fechas.', 'status' => 409];
+        }
+
+        return ['ok' => true, 'fecha' => $nueva->format('Y-m-d')];
+    }
+
+    /**
+     * @param array<string, mixed> $reserva
+     */
+    private function anotar(array $reserva, string $texto): string
+    {
+        $stamp = (new \DateTimeImmutable('now', new \DateTimeZone('America/Argentina/Buenos_Aires')))->format('Y-m-d H:i');
+        $linea = sprintf('[%s] %s', $stamp, $texto);
+        $previa = trim((string) ($reserva['observaciones'] ?? ''));
+
+        return $previa === '' ? $linea : $previa."\n".$linea;
     }
 
     /**
      * @return array{ok: true, data: array<string, mixed>}|array{ok: false, error: string, status: int}
      */
-    public function transicionar(int $id, string $hacia, string $perfil): array
-    {
+    public function transicionar(
+        int $id,
+        string $hacia,
+        string $perfil,
+        ?string $destino = null,
+        ?int $usuarioId = null,
+        ?string $username = null,
+    ): array {
         $hacia = trim($hacia);
+        $destino = $destino !== null && $destino !== '' ? $destino : null;
         $reserva = $this->connection->fetchAssociative(
-            'SELECT id, estado, observaciones FROM cnb_app.reservas_varadero WHERE id = ?',
+            'SELECT id, estado, observaciones, numero_socio, embarcacion_id FROM cnb_app.reservas_varadero WHERE id = ?',
             [$id]
         );
         if (!$reserva) {
@@ -558,13 +800,18 @@ final class VaraderoService
         if (!$this->permiteTransicion($perfil, $desde, $hacia)) {
             return ['ok' => false, 'error' => 'Ese paso no corresponde a este usuario.', 'status' => 403];
         }
+        if ($hacia === 'finalizada' && !in_array($destino, ['amarra', 'socio'], true)) {
+            return ['ok' => false, 'error' => 'Indicá si vuelve a la amarra o se lo lleva el socio.', 'status' => 400];
+        }
 
         $notas = [
             'confirmada' => 'El operador confirmo la reserva y habilito el lugar.',
             'rechazada' => 'El operador rechazo la solicitud. El socio puede pedir otra.',
             'cancelada' => 'Reserva cancelada. El lugar quedo libre.',
             'en_curso' => 'El marinero informo que el barco ya esta en varadero.',
-            'finalizada' => 'El marinero informo que el barco volvio a su amarra. El lugar quedo libre.',
+            'finalizada' => $destino === 'socio'
+                ? 'El marinero informo que el socio se llevo el barco. El lugar quedo libre.'
+                : 'El marinero informo que el barco volvio a su amarra. El lugar quedo libre.',
         ];
         $stamp = (new \DateTimeImmutable('now', new \DateTimeZone('America/Argentina/Buenos_Aires')))
             ->format('Y-m-d H:i');
@@ -572,10 +819,43 @@ final class VaraderoService
         $linea = sprintf('[%s] %s', $stamp, $notas[$hacia] ?? $hacia);
         $nueva = $previa === '' ? $linea : $previa . "\n" . $linea;
 
-        $this->connection->update('cnb_app.reservas_varadero', [
-            'estado' => $hacia,
-            'observaciones' => $nueva,
-        ], ['id' => $id]);
+        $this->connection->beginTransaction();
+        try {
+            $this->connection->update('cnb_app.reservas_varadero', [
+                'estado' => $hacia,
+                'destino_salida' => $hacia === 'finalizada' ? $destino : null,
+                'observaciones' => $nueva,
+            ], ['id' => $id]);
+
+            if (in_array($hacia, ['en_curso', 'finalizada'], true) && $username !== null && $username !== '') {
+                $movimiento = $this->movimientos->registrar(
+                    (int) $reserva['numero_socio'],
+                    (int) $reserva['embarcacion_id'],
+                    $hacia === 'en_curso' ? 'ingreso' : 'egreso',
+                    'varadero',
+                    $hacia === 'finalizada' ? $destino : null,
+                    null,
+                    $usuarioId,
+                    $username,
+                    null,
+                    'varadero',
+                    $id,
+                    '',
+                    null,
+                );
+                if (!$movimiento['ok']) {
+                    $this->connection->rollBack();
+
+                    return ['ok' => false, 'error' => $movimiento['error'], 'status' => 400];
+                }
+            }
+            $this->connection->commit();
+        } catch (\Throwable $exception) {
+            if ($this->connection->isTransactionActive()) {
+                $this->connection->rollBack();
+            }
+            throw $exception;
+        }
 
         $actualizada = $this->connection->fetchAssociative(
             "SELECT r.*, e.nombre AS embarcacion_nombre, e.matricula AS embarcacion_matricula,
@@ -631,6 +911,10 @@ final class VaraderoService
         if (!empty($normalized['embarcacion_matricula'])) {
             $normalized['embarcacion'] .= ' - ' . $normalized['embarcacion_matricula'];
         }
+        if (isset($normalized['extension_hasta']) && $normalized['extension_hasta'] !== null && $normalized['extension_hasta'] !== '') {
+            $normalized['extension_hasta'] = substr((string) $normalized['extension_hasta'], 0, 10);
+        }
+        $normalized['semaforo'] = $this->semaforo($normalized);
 
         return $normalized;
     }

@@ -58,6 +58,7 @@ final class AmarraController extends AbstractController
                         $embarcacion > 0 ? $embarcacion : null,
                         $tipo > 0 ? $tipo : null,
                         trim((string) $request->request->get('observaciones', '')),
+                        $request->request->get('cambio_embarcacion') === '1',
                     );
                     if (!$resultado['ok']) {
                         $error = $resultado['error'];
@@ -75,7 +76,7 @@ final class AmarraController extends AbstractController
                     }
                 }
             } catch (DbalException) {
-                $error = 'No se pudo guardar. Falta aplicar sql/021_tipos_y_amarras.sql.';
+                $error = 'No se pudo guardar. Falta aplicar sql/021_tipos_y_amarras.sql y sql/025_amarra_ampliacion.sql.';
             }
         }
 
@@ -87,7 +88,7 @@ final class AmarraController extends AbstractController
             $lista = [];
             $tipos = [];
             $barcos = [];
-            $error ??= 'Falta aplicar sql/021_tipos_y_amarras.sql.';
+            $error ??= 'Falta aplicar sql/021_tipos_y_amarras.sql y sql/025_amarra_ampliacion.sql.';
         }
 
         return $this->render('admin/amarras.html.twig', [

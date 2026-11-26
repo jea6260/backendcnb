@@ -110,11 +110,50 @@ final class AdminController extends AbstractController
                     (int) ($data['id'] ?? 0),
                     (string) ($data['estado'] ?? ''),
                     $actor === null ? '' : $this->usuarios->perfil($actor),
+                    ($data['destino'] ?? '') !== '' ? (string) $data['destino'] : null,
+                    $actor === null ? null : (int) $actor['id'],
+                    $actor === null ? null : (string) $actor['username'],
                 );
                 if (!$resultado['ok']) {
                     $error = $resultado['error'];
                 } else {
                     $this->addFlash('success', 'Reserva actualizada.');
+
+                    return $this->redirectToRoute('admin_varadero');
+                }
+            } elseif ($accion === 'baja' && $soloPropio) {
+                $resultado = $this->varadero->cancelarPorSocio((int) ($data['reserva_id'] ?? 0), $numeroFijo);
+                if (!$resultado['ok']) {
+                    $error = $resultado['error'];
+                } else {
+                    $this->addFlash('success', 'Diste de baja el turno.');
+
+                    return $this->redirectToRoute('admin_varadero');
+                }
+            } elseif ($accion === 'extension' && $soloPropio) {
+                $resultado = $this->varadero->solicitarExtension(
+                    (int) ($data['reserva_id'] ?? 0),
+                    $numeroFijo,
+                    (string) ($data['extension_hasta'] ?? ''),
+                );
+                if (!$resultado['ok']) {
+                    $error = $resultado['error'];
+                } else {
+                    $this->addFlash('success', 'Pediste la extensión. La decide operaciones.');
+
+                    return $this->redirectToRoute('admin_varadero');
+                }
+            } elseif ($accion === 'resolver_extension' && !$soloPropio) {
+                $actor = $this->usuarios->findActivePanelUser($this->sessionUserId($session));
+                $resultado = $this->varadero->resolverExtension(
+                    (int) ($data['id'] ?? 0),
+                    (string) ($data['decision'] ?? '') === 'aprobar',
+                    $actor === null ? '' : $this->usuarios->perfil($actor),
+                );
+                if (!$resultado['ok']) {
+                    $error = $resultado['error'];
+                } else {
+                    $this->addFlash('success', 'Extensión actualizada.');
 
                     return $this->redirectToRoute('admin_varadero');
                 }
@@ -196,6 +235,7 @@ final class AdminController extends AbstractController
         if (!$soloPropio) {
             $abiertas = $this->connection->fetchAllAssociative(
                 "SELECT r.id, r.estado, r.numero_socio, r.fecha_inicio, r.fecha_fin,
+                        r.extension_estado, r.extension_hasta,
                         e.nombre AS embarcacion, sp.codigo AS espacio,
                         s.nombre AS socio_nombre, s.apellido AS socio_apellido
                  FROM cnb_app.reservas_varadero r
@@ -208,7 +248,9 @@ final class AdminController extends AbstractController
             foreach ($abiertas as $fila) {
                 $fila['fecha_inicio'] = substr((string) $fila['fecha_inicio'], 0, 10);
                 $fila['fecha_fin'] = substr((string) $fila['fecha_fin'], 0, 10);
-                $fila['accion'] = $this->varadero->accionDisponible($perfil, (string) $fila['estado']);
+                $fila['extension_hasta'] = $fila['extension_hasta'] !== null ? substr((string) $fila['extension_hasta'], 0, 10) : null;
+                $fila['semaforo'] = $this->varadero->semaforo($fila);
+                $fila['acciones'] = $this->varadero->accionesDisponibles($perfil, (string) $fila['estado']);
                 $fila['puede_rechazar'] = $fila['estado'] === 'pendiente'
                     && in_array($perfil, ['operador', 'administrador', 'superuser'], true);
                 $ciclo[] = $fila;

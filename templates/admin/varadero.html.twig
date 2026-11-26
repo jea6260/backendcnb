@@ -135,7 +135,10 @@
         }
         .var-tl-bar.estado-pendiente { background: #fd7e14; }
         .var-tl-bar.estado-confirmada { background: #0d6efd; }
-        .var-tl-bar.estado-en_curso { background: #198754; }
+        .var-tl-bar.estado-en_curso,
+        .var-tl-bar.semaforo-verde { background: #198754; }
+        .var-tl-bar.semaforo-naranja { background: #fd7e14; }
+        .var-tl-bar.semaforo-rojo { background: #dc3545; }
         .var-legend span {
             display: inline-flex;
             align-items: center;
@@ -217,15 +220,47 @@
                                         <td>{{ fila.embarcacion|default('—') }}</td>
                                         <td>{{ fila.espacio|default('—') }}</td>
                                         <td>{{ fila.fecha_inicio }} → {{ fila.fecha_fin }}</td>
-                                        <td>{{ etiquetas[fila.estado]|default(fila.estado) }}</td>
-                                        <td>{{ fila.estado == 'pendiente' ? 'Operador' : 'Marinero' }}</td>
+                                        <td>
+                                            {{ etiquetas[fila.estado]|default(fila.estado) }}
+                                            {% if fila.semaforo.color %}
+                                                <div class="small fw-semibold {% if fila.semaforo.color == 'verde' %}text-success{% elseif fila.semaforo.color == 'rojo' %}text-danger{% else %}text-warning{% endif %}">
+                                                    {{ fila.semaforo.etiqueta }}
+                                                </div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if fila.estado == 'pendiente' or fila.semaforo.codigo == 'extension' %}
+                                                Operador
+                                            {% elseif fila.semaforo.codigo == 'vencido' %}
+                                                Socio
+                                            {% else %}
+                                                Marinero
+                                            {% endif %}
+                                        </td>
                                         <td class="text-end">
-                                            {% if fila.accion %}
+                                            {% for accion in fila.acciones %}
                                                 <form method="post" class="d-inline">
                                                     <input type="hidden" name="_accion" value="transicion">
                                                     <input type="hidden" name="id" value="{{ fila.id }}">
-                                                    <input type="hidden" name="estado" value="{{ fila.accion.estado }}">
-                                                    <button class="btn btn-sm btn-primary" type="submit">{{ fila.accion.etiqueta }}</button>
+                                                    <input type="hidden" name="estado" value="{{ accion.estado }}">
+                                                    {% if accion.destino %}
+                                                        <input type="hidden" name="destino" value="{{ accion.destino }}">
+                                                    {% endif %}
+                                                    <button class="btn btn-sm btn-primary" type="submit">{{ accion.etiqueta }}</button>
+                                                </form>
+                                            {% endfor %}
+                                            {% if fila.semaforo.codigo == 'extension' and perfil in ['operador', 'administrador', 'superuser'] %}
+                                                <form method="post" class="d-inline">
+                                                    <input type="hidden" name="_accion" value="resolver_extension">
+                                                    <input type="hidden" name="id" value="{{ fila.id }}">
+                                                    <input type="hidden" name="decision" value="aprobar">
+                                                    <button class="btn btn-sm btn-success" type="submit">Aprobar hasta {{ fila.extension_hasta }}</button>
+                                                </form>
+                                                <form method="post" class="d-inline">
+                                                    <input type="hidden" name="_accion" value="resolver_extension">
+                                                    <input type="hidden" name="id" value="{{ fila.id }}">
+                                                    <input type="hidden" name="decision" value="rechazar">
+                                                    <button class="btn btn-sm btn-outline-danger" type="submit">Rechazar extensión</button>
                                                 </form>
                                             {% endif %}
                                             {% if fila.puede_rechazar %}
@@ -272,8 +307,14 @@
                         </div>
 
                         <div class="col-12" id="active-reserva-panel" style="{{ reserva_activa ? '' : 'display:none' }}">
-                            <div class="alert alert-warning mb-0">
-                                <div class="fw-semibold mb-1">Pedido abierto: no podés cargar otro</div>
+                            {% set luz = reserva_activa ? reserva_activa.semaforo.color|default('') : '' %}
+                            {% set aviso = reserva_activa ? reserva_activa.semaforo.etiqueta|default('') : '' %}
+                            {% set detalle = reserva_activa ? reserva_activa.semaforo.detalle|default('') : '' %}
+                            <div class="alert {{ luz == 'verde' ? 'alert-success' : (luz == 'rojo' ? 'alert-danger' : 'alert-warning') }} mb-0">
+                                <div class="fw-semibold mb-1">{{ aviso ?: 'Pedido abierto: no podés cargar otro' }}</div>
+                                {% if detalle %}
+                                    <div class="small mb-1">{{ detalle }}</div>
+                                {% endif %}
                                 <div class="small" id="active-reserva-summary">
                                     {% if reserva_activa %}
                                         #{{ reserva_activa.id }} · {{ etiquetas[reserva_activa.estado]|default(reserva_activa.estado) }}
@@ -344,6 +385,19 @@
                             <textarea class="form-control" id="observaciones" name="observaciones" rows="3" {% if reserva_activa %}required{% endif %} placeholder="{{ reserva_activa ? 'Ej: Solicito extender la reserva 3 dias mas' : '' }}">{% if not reserva_activa %}{{ data.observaciones }}{% endif %}</textarea>
                         </div>
 
+                        {% if solo_propio and reserva_activa and reserva_activa.estado in ['pendiente', 'confirmada'] %}
+                            <div class="col-12">
+                                <button class="btn btn-outline-danger" type="submit" name="_accion" value="baja" formnovalidate>Dar de baja el turno</button>
+                                <div class="form-text">Podés darlo de baja mientras no haya empezado. Después lo siguen operaciones y los marineros.</div>
+                            </div>
+                        {% endif %}
+                        {% if solo_propio and reserva_activa and reserva_activa.semaforo.codigo|default('') == 'vencido' %}
+                            <div class="col-12">
+                                <label class="form-label" for="extension_hasta">Pedir extensión hasta</label>
+                                <input class="form-control" type="date" id="extension_hasta" name="extension_hasta" min="{{ reserva_activa.fecha_fin }}">
+                                <button class="btn btn-warning mt-2" type="submit" name="_accion" value="extension" formnovalidate>Pedir extensión</button>
+                            </div>
+                        {% endif %}
                         <div class="col-12">
                             <button class="btn btn-primary" type="submit" id="btn-guardar">
                                 {{ reserva_activa ? 'Agregar observacion' : (solo_propio ? 'Solicitar varadero' : 'Crear reserva') }}
@@ -371,7 +425,9 @@
                     <div class="var-legend mb-2">
                         <span><i style="background:#fd7e14"></i> Pendiente</span>
                         <span><i style="background:#0d6efd"></i> Confirmada</span>
-                        <span><i style="background:#198754"></i> En curso</span>
+                        <span><i style="background:#198754"></i> En plazo</span>
+                        <span><i style="background:#fd7e14"></i> Extensión pedida</span>
+                        <span><i style="background:#dc3545"></i> Vencido</span>
                         <span><i style="background:#f8d7da;border:1px solid #f1aeb5"></i> Ocupado (calendario)</span>
                     </div>
                     <div class="var-timeline-wrap">
@@ -722,17 +778,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             (espacio.reservas || []).forEach(reserva => {
                 let start = daysBetween(data.desde, reserva.fecha_inicio) - 1;
-                let endExclusive = daysBetween(data.desde, reserva.fecha_fin);
+                const finVisible = reserva.ocupa_hasta || reserva.fecha_fin;
+                let endExclusive = daysBetween(data.desde, finVisible);
                 if (reserva.fecha_inicio < data.desde) start = 0;
-                if (reserva.fecha_fin > data.hasta) endExclusive = totalDays;
+                if (finVisible > data.hasta) endExclusive = totalDays;
                 if (endExclusive <= 0 || start >= totalDays) return;
                 const widthDays = Math.max(1, endExclusive - Math.max(0, start));
                 const left = Math.max(0, start);
                 const bar = document.createElement('div');
-                bar.className = `var-tl-bar estado-${reserva.estado}`;
+                bar.className = reserva.semaforo
+                    ? `var-tl-bar semaforo-${reserva.semaforo}`
+                    : `var-tl-bar estado-${reserva.estado}`;
                 bar.style.left = `calc(${left} * 100% / ${totalDays})`;
                 bar.style.width = `calc(${widthDays} * 100% / ${totalDays} - 2px)`;
-                bar.title = `#${reserva.id} ${reserva.socio} · ${reserva.embarcacion} · ${reserva.fecha_inicio} a ${reserva.fecha_fin} (${reserva.estado})`;
+                bar.title = `#${reserva.id} ${reserva.socio} · ${reserva.embarcacion} · ${reserva.fecha_inicio} a ${reserva.fecha_fin} (${reserva.semaforo_etiqueta || reserva.estado})`;
                 const socio = reserva.socio
                     ? `${reserva.socio} · #${reserva.numero_socio}`
                     : `#${reserva.numero_socio}`;

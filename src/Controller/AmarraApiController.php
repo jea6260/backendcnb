@@ -74,6 +74,7 @@ final class AmarraApiController extends AbstractController
                 $embarcacion > 0 ? $embarcacion : null,
                 $tipo > 0 ? $tipo : null,
                 trim((string) ($data['observaciones'] ?? '')),
+                filter_var($data['cambio_embarcacion'] ?? false, FILTER_VALIDATE_BOOLEAN),
             );
         } catch (DbalException $exception) {
             return $this->dbalError($exception);

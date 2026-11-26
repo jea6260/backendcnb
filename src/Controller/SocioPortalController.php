@@ -525,6 +525,43 @@ final class SocioPortalController extends AbstractController
         return $this->json(['data' => $resultado['data']]);
     }
 
+    #[Route('/reservas-varadero/{id}/extension', name: 'api_socio_reservas_extension', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function pedirExtensionVaradero(int $id, Request $request): JsonResponse
+    {
+        $socio = $this->authenticate($request);
+        if ($socio instanceof JsonResponse) {
+            return $socio;
+        }
+
+        $data = $this->jsonBody($request);
+        $resultado = $this->varadero->solicitarExtension(
+            $id,
+            (int) $socio['numero_socio'],
+            (string) ($data['fecha_hasta'] ?? ''),
+        );
+        if (!$resultado['ok']) {
+            return $this->json(['error' => $resultado['error']], $resultado['status']);
+        }
+
+        return $this->json(['data' => $this->varadero->reservaBloqueanteDeSocio((int) $socio['numero_socio'])]);
+    }
+
+    #[Route('/reservas-varadero/{id}/baja', name: 'api_socio_reservas_baja', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function bajaVaradero(int $id, Request $request): JsonResponse
+    {
+        $socio = $this->authenticate($request);
+        if ($socio instanceof JsonResponse) {
+            return $socio;
+        }
+
+        $resultado = $this->varadero->cancelarPorSocio($id, (int) $socio['numero_socio']);
+        if (!$resultado['ok']) {
+            return $this->json(['error' => $resultado['error']], $resultado['status']);
+        }
+
+        return $this->json(['data' => ['estado' => 'cancelada']]);
+    }
+
     #[Route('/reservas-varadero', name: 'api_socio_reservas_create', methods: ['POST'])]
     public function crearReservaVaradero(Request $request): JsonResponse
     {

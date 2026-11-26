@@ -47,6 +47,7 @@ final class AmarraService
                        so.fecha_ingreso AS fecha_ingreso_socio,
                        s.destino_solicitado, s.destino_disponible, s.m2_necesarios, s.m2_disponibles,
                        s.estado, s.observaciones, s.embarcacion_id, s.tipo_embarcacion_id,
+                       s.metros_comprados, s.cambio_embarcacion,
                        trim(so.nombre || ' ' || so.apellido) AS socio,
                        t.nombre AS tipo_nombre, t.eslora_m, t.eslora_max_m, t.manga_m,
                        e.nombre AS embarcacion
@@ -73,6 +74,7 @@ final class AmarraService
         foreach ($rows as &$row) {
             $eslora = $row['eslora_max_m'] ?? $row['eslora_m'];
             $row['destino_por_eslora'] = $this->destinoPorEslora($eslora !== null && $eslora !== '' ? (float) $eslora : null);
+            $row['cambio_embarcacion'] = filter_var($row['cambio_embarcacion'] ?? false, FILTER_VALIDATE_BOOLEAN);
             if (in_array($row['estado'], ['en_lista', 'ofrecida'], true)) {
                 $row['prioridad'] = ++$prioridad;
             } else {
@@ -115,18 +117,38 @@ final class AmarraService
         ?int $embarcacionId,
         ?int $tipoId,
         string $observaciones,
+        bool $cambioEmbarcacion = false,
     ): array {
-        if (!in_array($modalidad, ['compra', 'alquiler'], true)) {
-            return ['ok' => false, 'error' => 'La modalidad es compra o alquiler.'];
+        if (!in_array($modalidad, ['compra', 'alquiler', 'ampliacion'], true)) {
+            return ['ok' => false, 'error' => 'La modalidad es compra, alquiler o ampliación.'];
         }
         if (!in_array($destinoSolicitado, ['agua', 'tierra'], true)) {
             return ['ok' => false, 'error' => 'El destino es agua o tierra.'];
         }
-        if ($embarcacionId === null && $tipoId === null) {
-            return ['ok' => false, 'error' => 'Elegí una embarcación o un tipo.'];
-        }
 
-        $tipo = $this->tipoDePedido($numeroSocio, $embarcacionId, $tipoId);
+        $metrosComprados = null;
+        if ($modalidad === 'ampliacion') {
+            if ($embarcacionId === null) {
+                return ['ok' => false, 'error' => 'La ampliación usa una embarcación del padrón.'];
+            }
+            $propia = $this->embarcacionPropia($numeroSocio, $embarcacionId);
+            if (isset($propia['error'])) {
+                return ['ok' => false, 'error' => $propia['error']];
+            }
+            $metrosComprados = $propia['metros_comprados'];
+            if ($cambioEmbarcacion && $tipoId === null) {
+                return ['ok' => false, 'error' => 'Elegí el tipo nuevo de la embarcación.'];
+            }
+            $tipo = $tipoId !== null
+                ? $this->tipoPorId($tipoId)
+                : $this->tipoDePedido($numeroSocio, $embarcacionId, null);
+        } else {
+            $cambioEmbarcacion = false;
+            if ($embarcacionId === null && $tipoId === null) {
+                return ['ok' => false, 'error' => 'Elegí una embarcación o un tipo.'];
+            }
+            $tipo = $this->tipoDePedido($numeroSocio, $embarcacionId, $tipoId);
+        }
         if (isset($tipo['error'])) {
             return ['ok' => false, 'error' => $tipo['error']];
         }
@@ -149,8 +171,8 @@ final class AmarraService
         $id = $this->connection->fetchOne(
             'INSERT INTO cnb_app.solicitudes_amarra
                 (numero_socio, embarcacion_id, tipo_embarcacion_id, modalidad, fecha_ingreso_socio,
-                 destino_solicitado, m2_necesarios, observaciones)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 destino_solicitado, m2_necesarios, metros_comprados, cambio_embarcacion, observaciones)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              RETURNING id',
             [
                 $numeroSocio,
@@ -160,6 +182,8 @@ final class AmarraService
                 $ingreso ?: null,
                 $destinoSolicitado,
                 $m2,
+                $metrosComprados,
+                $cambioEmbarcacion,
                 $observaciones !== '' ? $observaciones : null,
             ]
         );
@@ -195,6 +219,48 @@ final class AmarraService
         ], ['id' => $id]);
 
         return $updated === 1 ? null : 'No se encontró la solicitud.';
+    }
+
+    /**
+     * @return array{metros_comprados: float|null}|array{error: string}
+     */
+    private function embarcacionPropia(int $numeroSocio, int $embarcacionId): array
+    {
+        $propia = $this->connection->fetchOne(
+            'SELECT 1 FROM cnb_app.socio_embarcacion WHERE numero_socio = ? AND embarcacion_id = ?
+             UNION
+             SELECT 1 FROM cnb_app.embarcaciones WHERE id = ? AND numero_socio = ?',
+            [$numeroSocio, $embarcacionId, $embarcacionId, $numeroSocio]
+        );
+        if (!$propia) {
+            return ['error' => 'Esa embarcación no está vinculada a tu número de socio.'];
+        }
+
+        $metros = $this->connection->fetchOne(
+            'SELECT metros_comprados FROM cnb_app.embarcaciones WHERE id = ?',
+            [$embarcacionId]
+        );
+        if ($metros === false) {
+            return ['error' => 'No se encontró la embarcación.'];
+        }
+
+        return [
+            'metros_comprados' => $metros !== null && $metros !== '' ? (float) $metros : null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function tipoPorId(int $tipoId): array
+    {
+        $tipo = $this->connection->fetchAssociative(
+            'SELECT id, COALESCE(eslora_max_m, eslora_m) AS eslora_max_m, eslora_m, manga_m
+             FROM cnb_app.tipos_embarcacion WHERE id = ?',
+            [$tipoId]
+        );
+
+        return $tipo === false ? ['error' => 'No se encontró el tipo de embarcación.'] : $tipo;
     }
 
     /**
@@ -234,12 +300,6 @@ final class AmarraService
             return $row;
         }
 
-        $tipo = $this->connection->fetchAssociative(
-            'SELECT id, COALESCE(eslora_max_m, eslora_m) AS eslora_max_m, eslora_m, manga_m
-             FROM cnb_app.tipos_embarcacion WHERE id = ?',
-            [$tipoId]
-        );
-
-        return $tipo === false ? ['error' => 'No se encontró el tipo de embarcación.'] : $tipo;
+        return $this->tipoPorId((int) $tipoId);
     }
 }

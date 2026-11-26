@@ -1,0 +1,15 @@
+# Render Native / Nixpacks: PHP 8.2 + pdo_pgsql para Neon
+[phases.setup]
+nixPkgs = [
+  "php82",
+  "php82Packages.composer",
+  "php82Extensions.pdo",
+  "php82Extensions.pdo_pgsql",
+  "php82Extensions.pgsql",
+]
+
+[phases.install]
+cmds = ["composer install --no-dev --optimize-autoloader --no-interaction"]
+
+[start]
+cmd = "php -S 0.0.0.0:$PORT -t public public/router.php"

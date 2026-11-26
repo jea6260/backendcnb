@@ -21,34 +21,19 @@ Crea un repo en GitHub y hace push (`git remote add origin ...` + `git push -u o
 2. Registrate (GitHub es lo mas comodo)
 3. Conecta el repositorio `backendcnb`
 
-## 3. Deploy con Blueprint (recomendado)
+## 3. Deploy nativo sin Docker (recomendado)
 
-1. **New → Blueprint**
-2. Elegi el repo
-3. Render lee `render.yaml` y crea:
-   - PostgreSQL free (`cnb-db`)
-   - Web Service Docker (`cnb-backend`)
-4. En `DEFAULT_URI`, poné la URL publica cuando exista, por ejemplo:
-   `https://cnb-backend.onrender.com`
-5. **Apply** / Create
+Usá **Web Service** nativo + Neon (la DB no caduca con el Postgres free de Render).
 
-La primera build tarda varios minutos.
-
-## 4. Alternativa manual (sin Blueprint)
-
-### Base de datos
-
-1. **New → PostgreSQL**
-2. Plan: **Free**
-3. Anotá la **Internal Database URL**
-
-### Web Service
-
-1. **New → Web Service**
-2. Repo: este proyecto
-3. Runtime: **Docker**
+1. **New → Web Services**
+2. Conectá el repo `backendcnb`
+3. Runtime: **Native** (no Docker)
 4. Plan: **Free**
-5. Variables de entorno:
+5. Build Command:
+   `composer install --no-dev --optimize-autoloader --no-interaction`
+6. Start Command:
+   `php -S 0.0.0.0:$PORT -t public public/router.php`
+7. Variables de entorno:
 
 | Key | Valor |
 |-----|--------|
@@ -56,9 +41,18 @@ La primera build tarda varios minutos.
 | `APP_DEBUG` | `0` |
 | `APP_SECRET` | una cadena larga aleatoria |
 | `DEFAULT_URI` | `https://TU-SERVICIO.onrender.com` |
-| `DATABASE_URL` | Internal Database URL (Render la puede linkear) |
+| `DATABASE_URL` | connection string de Neon (pooler OK) |
+| `ADMIN_USERNAME` | usuario del panel `/admin` |
+| `ADMIN_PASSWORD` | clave del panel, minimo 8 caracteres |
 
-Render inyecta `PORT` solo; el entrypoint ya lo respeta.
+`nixpacks.toml` instala PHP 8.2 + `pdo_pgsql`. Si la base Neon ya tiene el esquema, no hace falta `render-init-db.sh`.
+
+## 4. Blueprint (tambien nativo)
+
+1. **New → Blueprint**
+2. Elegi el repo (`render.yaml` ya apunta a runtime native)
+3. Completá `DATABASE_URL` (Neon) y `DEFAULT_URI`
+4. **Apply**
 
 ## 5. Inicializar el esquema SQL (una sola vez)
 
@@ -83,7 +77,7 @@ Si falla porque las tablas ya existen, es que ya se inicializo.
 Cuando el deploy diga **Live**:
 
 - Health: `https://TU-SERVICIO.onrender.com/api/health`
-- Admin: `https://TU-SERVICIO.onrender.com/admin`
+- Admin: `https://TU-SERVICIO.onrender.com/admin` (pide `ADMIN_USERNAME` / `ADMIN_PASSWORD`)
 
 Esperado en health:
 

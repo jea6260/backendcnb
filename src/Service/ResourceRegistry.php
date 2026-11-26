@@ -36,10 +36,17 @@ final class ResourceRegistry
                         'help' => 'Foto del socio para carnet y reconocimiento facial.',
                     ],
                     'fecha_ingreso' => ['label' => 'Ingreso al club', 'type' => 'date', 'list' => true],
-                    'estado' => ['label' => 'Estado', 'type' => 'choice', 'required' => true, 'default' => 'activo', 'list' => true, 'choices' => [
-                        'activo' => 'Activo',
+                    'estado' => ['label' => 'Estado', 'type' => 'choice', 'required' => true, 'default' => 'AO', 'list' => true, 'choices' => [
+                        'AO' => 'Activo',
+                        'MR' => 'Menor',
+                        'AA' => 'Conyuge',
+                        'VO' => 'Vitalicio',
+                        'AE' => 'Ausente',
+                        'HO' => 'Honorario',
+                        'BA' => 'Baja',
+                        'activo' => 'Activo (anterior)',
                         'suspendido' => 'Suspendido',
-                        'baja' => 'Baja',
+                        'baja' => 'Baja (anterior)',
                     ]],
                 ],
             ],
@@ -334,6 +341,28 @@ final class ResourceRegistry
                     'biometric_habilitado' => ['label' => 'Biometria', 'type' => 'boolean', 'default' => false, 'list' => true],
                 ],
             ],
+            'comandos-voz' => [
+                'table' => 'comandos_voz',
+                'label' => 'Comandos de voz',
+                'singular' => 'Comando de voz',
+                'description' => 'Mnemonicos que la app ejecuta al reconocer una frase.',
+                'fields' => [
+                    'mnemonico' => ['label' => 'Mnemonico', 'type' => 'text', 'required' => true, 'list' => true],
+                    'descripcion' => ['label' => 'Descripcion', 'type' => 'text', 'required' => true, 'list' => true],
+                    'activo' => ['label' => 'Activo', 'type' => 'boolean', 'default' => true, 'list' => true],
+                ],
+            ],
+            'frases-comando-voz' => [
+                'table' => 'frases_comando_voz',
+                'label' => 'Frases de voz',
+                'singular' => 'Frase de voz',
+                'description' => 'Formas de decir un comando. {nombre} y {socio} son huecos.',
+                'fields' => [
+                    'comando_id' => ['label' => 'Comando', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'comandos_voz', 'label' => 'mnemonico']],
+                    'frase' => ['label' => 'Frase', 'type' => 'text', 'required' => true, 'list' => true],
+                    'activo' => ['label' => 'Activo', 'type' => 'boolean', 'default' => true, 'list' => true],
+                ],
+            ],
             'mediciones-nivel' => [
                 'table' => 'mediciones_nivel',
                 'label' => 'Nivel del lago',
@@ -606,10 +635,13 @@ final class ResourceRegistry
         $sql = "SELECT e.*,
                        u.nombre AS ubicacion,
                        u.ambito AS ubicacion_ambito,
-                       ep.nombre AS estado_padron
+                       ep.nombre AS estado_padron,
+                       s.nombre AS socio_nombre,
+                       s.apellido AS socio_apellido
                 FROM cnb_app.embarcaciones e
                 LEFT JOIN cnb_app.ubicaciones u ON u.id = e.ubicacion_id
                 LEFT JOIN cnb_app.estados_padron ep ON ep.id = e.estado_padron_id
+                LEFT JOIN cnb_app.socios s ON s.numero_socio = e.numero_socio
                 WHERE 1=1";
         $params = [];
 

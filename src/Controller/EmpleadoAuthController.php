@@ -294,7 +294,7 @@ final class EmpleadoAuthController extends AbstractController
         if (!$acceso || !password_verify($pass, (string) $acceso['password_hash'])) {
             return 'Usuario o contraseña invalidos.';
         }
-        if (($acceso['estado'] ?? '') !== 'activo') {
+        if (!in_array($acceso['estado'] ?? '', ['activo', 'AO', 'MR', 'AA', 'VO', 'AE', 'HO'], true)) {
             return 'Socio no activo';
         }
         if ($row && ($row['rol'] ?? '') !== 'socio') {

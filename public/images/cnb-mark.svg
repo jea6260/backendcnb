@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" role="img" aria-label="Marca nautica original">
+  <circle cx="36" cy="36" r="34" fill="#071a33"/>
+  <circle cx="36" cy="36" r="30" fill="none" stroke="#c6a15b" stroke-width="2"/>
+  <path d="M36 14 L50 40 H22 Z" fill="#f7f4ee"/>
+  <path d="M36 18 L46 40 H26 Z" fill="#0c4a6e"/>
+  <path d="M36 22 L42 40 H30 Z" fill="#f7f4ee"/>
+  <path d="M36 40 V58" stroke="#c6a15b" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="36" cy="50" r="6" fill="none" stroke="#c6a15b" stroke-width="2"/>
+  <path d="M30 56 H42" stroke="#c6a15b" stroke-width="2" stroke-linecap="round"/>
+  <path d="M18 46 Q36 40 54 46" fill="none" stroke="#7ec8e3" stroke-width="1.6"/>
+  <path d="M16 51 Q36 44 56 51" fill="none" stroke="#c6a15b" stroke-width="1.4" opacity=".85"/>
+</svg>

@@ -171,7 +171,7 @@ final class AdminController extends AbstractController
             "SELECT numero_socio AS id,
                     apellido || ', ' || nombre || ' #' || numero_socio AS label
              FROM cnb_app.socios
-             WHERE estado = 'activo'
+             WHERE estado NOT IN ('BA', 'baja', 'suspendido')
              ORDER BY apellido ASC, nombre ASC"
         );
 
@@ -196,10 +196,12 @@ final class AdminController extends AbstractController
         if (!$soloPropio) {
             $abiertas = $this->connection->fetchAllAssociative(
                 "SELECT r.id, r.estado, r.numero_socio, r.fecha_inicio, r.fecha_fin,
-                        e.nombre AS embarcacion, sp.codigo AS espacio
+                        e.nombre AS embarcacion, sp.codigo AS espacio,
+                        s.nombre AS socio_nombre, s.apellido AS socio_apellido
                  FROM cnb_app.reservas_varadero r
                  LEFT JOIN cnb_app.embarcaciones e ON e.id = r.embarcacion_id
                  LEFT JOIN cnb_app.espacios_varadero sp ON sp.id = r.espacio_id
+                 LEFT JOIN cnb_app.socios s ON s.numero_socio = r.numero_socio
                  WHERE r.estado IN ('pendiente', 'confirmada', 'en_curso')
                  ORDER BY r.fecha_inicio ASC, r.id ASC"
             );
@@ -385,6 +387,27 @@ final class AdminController extends AbstractController
         return 'data:'.$file->getMimeType().';base64,'.base64_encode($binary);
     }
 
+    private function fotoBytes(?string $foto): ?string
+    {
+        if ($foto === null) {
+            return null;
+        }
+        $raw = trim($foto);
+        if ($raw === '') {
+            return null;
+        }
+        if (str_starts_with($raw, 'data:')) {
+            $raw = explode(',', $raw, 2)[1] ?? '';
+        }
+        $raw = preg_replace('/\s+/', '', $raw) ?? '';
+        $bytes = base64_decode($raw, true);
+        if ($bytes === false || $bytes === '') {
+            return null;
+        }
+
+        return $bytes;
+    }
+
     private function sessionUserId(\Symfony\Component\HttpFoundation\Session\SessionInterface $session): int
     {
         $raw = $session->get(UsuarioAuthService::ADMIN_SESSION_ID);
@@ -534,6 +557,33 @@ final class AdminController extends AbstractController
             'data' => $embarcaciones,
             'reserva_activa' => $reservaActiva,
             'puede_crear' => $reservaActiva === null,
+        ]);
+    }
+
+    #[Route('/admin/perfil-foto', name: 'admin_perfil_foto', priority: 30, methods: ['GET'])]
+    public function perfilFoto(Request $request): Response
+    {
+        $session = $request->getSession();
+        if ($session->get(UsuarioAuthService::ADMIN_SESSION_PERFIL) !== 'socio') {
+            return new Response('', Response::HTTP_NOT_FOUND);
+        }
+
+        $numero = (int) $session->get(UsuarioAuthService::ADMIN_SESSION_SOCIO, 0);
+        $foto = $this->connection->fetchOne(
+            'SELECT COALESCE(NULLIF(s.foto_perfil, \'\'), sa.facial_reference)
+             FROM cnb_app.socios s
+             LEFT JOIN cnb_app.socio_acceso sa ON sa.numero_socio = s.numero_socio
+             WHERE s.numero_socio = ?',
+            [$numero]
+        );
+        $bytes = $this->fotoBytes(is_string($foto) ? $foto : null);
+        if ($bytes === null) {
+            return new Response('', Response::HTTP_NOT_FOUND);
+        }
+
+        return new Response($bytes, Response::HTTP_OK, [
+            'Content-Type' => 'image/jpeg',
+            'Cache-Control' => 'private, max-age=300',
         ]);
     }
 

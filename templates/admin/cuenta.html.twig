@@ -6,6 +6,9 @@
     <div class="row justify-content-center">
         <div class="col-12 col-md-6 col-lg-5">
             <h1 class="h3 mb-1">Mi cuenta</h1>
+            {% if rol == 'socio' %}
+                <img class="cnb-perfil-foto mb-3" src="{{ path('admin_perfil_foto') }}" alt="Foto de perfil" width="96" height="128" onerror="this.remove()">
+            {% endif %}
             {% if rol == 'socio' and nombre %}
                 <p class="h5 mb-1">{{ nombre }}</p>
             {% endif %}

@@ -48,4 +48,9 @@ if [ -f sql/015_socio_embarcacion_m2m_foto_geofence.sql ]; then
   psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f sql/015_socio_embarcacion_m2m_foto_geofence.sql
 fi
 
+if [ -f sql/023_comandos_voz.sql ]; then
+  echo "Aplicando comandos de voz..."
+  psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f sql/023_comandos_voz.sql
+fi
+
 echo "OK: base inicializada / actualizada."

@@ -388,7 +388,7 @@ final class SocioCuentaService
             return $this->dbError($exception);
         }
 
-        if ($row === false || (string) $row['estado'] !== 'activo' || (int) $row['pin'] !== (int) $pin) {
+        if ($row === false || !in_array((string) $row['estado'], ['activo', 'AO', 'MR', 'AA', 'VO', 'AE', 'HO'], true) || (int) $row['pin'] !== (int) $pin) {
             return 'No coincide el número de socio con el PIN.';
         }
 

@@ -208,7 +208,10 @@
                             <tbody>
                                 {% for fila in ciclo %}
                                     <tr>
-                                        <td>#{{ fila.numero_socio }}</td>
+                                        <td>
+                                            {% set persona = (fila.socio_apellido ~ ', ' ~ fila.socio_nombre)|trim(', ') %}
+                                            {% if persona %}{{ persona }} · {% endif %}#{{ fila.numero_socio }}
+                                        </td>
                                         <td>{{ fila.embarcacion|default('—') }}</td>
                                         <td>{{ fila.espacio|default('—') }}</td>
                                         <td>{{ fila.fecha_inicio }} → {{ fila.fecha_fin }}</td>
@@ -731,7 +734,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 bar.style.left = `calc(${left} * 100% / ${totalDays})`;
                 bar.style.width = `calc(${widthDays} * 100% / ${totalDays} - 2px)`;
                 bar.title = `#${reserva.id} ${reserva.socio} · ${reserva.embarcacion} · ${reserva.fecha_inicio} a ${reserva.fecha_fin} (${reserva.estado})`;
-                bar.textContent = `${reserva.embarcacion} · #${reserva.numero_socio}`;
+                const socio = reserva.socio
+                    ? `${reserva.socio} · #${reserva.numero_socio}`
+                    : `#${reserva.numero_socio}`;
+                bar.textContent = `${reserva.embarcacion} · ${socio}`;
                 track.appendChild(bar);
             });
 

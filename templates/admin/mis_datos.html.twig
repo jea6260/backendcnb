@@ -4,7 +4,7 @@
 
 {% block body %}
     <h1 class="h3 mb-1">Mis datos</h1>
-    <p class="text-muted">Socio #{{ socio.numero_socio }}. Podés completar lo que está vacío. Lo que ya figura no se modifica y no se puede borrar.</p>
+    <p class="text-muted">{{ socio.apellido }}{% if socio.nombre %}, {{ socio.nombre }}{% endif %} · Socio #{{ socio.numero_socio }}. Podés completar lo que está vacío. Lo que ya figura no se modifica y no se puede borrar.</p>
 
     {% if error %}
         <div class="alert alert-danger">{{ error }}</div>

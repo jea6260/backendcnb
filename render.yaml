@@ -1,19 +1,15 @@
 # Blueprint de Render: https://render.com/docs/blueprint-spec
-# Dashboard: New → Blueprint → conectar este repo.
-
-databases:
-  - name: cnb-db
-    plan: free
-    databaseName: cnbdb
-    user: cnb_user
+# Deploy nativo (sin Docker). La base de datos vive en Neon.
+# Dashboard: New → Blueprint → conectar este repo
+# o New → Web Service con Build/Start commands de abajo.
 
 services:
   - type: web
     name: cnb-backend
-    runtime: docker
+    runtime: native
     plan: free
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    buildCommand: composer install --no-dev --optimize-autoloader --no-interaction
+    startCommand: php -S 0.0.0.0:$PORT -t public public/router.php
     healthCheckPath: /api/health
     envVars:
       - key: APP_ENV
@@ -25,6 +21,8 @@ services:
       - key: DEFAULT_URI
         sync: false
       - key: DATABASE_URL
-        fromDatabase:
-          name: cnb-db
-          property: connectionString
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

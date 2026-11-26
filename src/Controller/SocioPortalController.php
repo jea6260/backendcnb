@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Service\ClubGeofence;
 use App\Service\RelayService;
 use App\Service\ResourceRegistry;
+use App\Service\UsuarioAuthService;
 use App\Service\VaraderoService;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception as DbalException;
@@ -22,6 +23,7 @@ final class SocioPortalController extends AbstractController
         private readonly ResourceRegistry $registry,
         private readonly VaraderoService $varadero,
         private readonly RelayService $relay,
+        private readonly UsuarioAuthService $usuarios,
     ) {
     }
 
@@ -72,7 +74,7 @@ final class SocioPortalController extends AbstractController
                 return $this->json(['error' => 'Numero de socio no encontrado'], Response::HTTP_NOT_FOUND);
             }
 
-            if (($socio['estado'] ?? '') !== 'activo') {
+            if (!in_array($socio['estado'] ?? '', ['activo', 'AO', 'MR', 'AA', 'VO', 'AE', 'HO'], true)) {
                 return $this->json(['error' => 'Socio no activo'], Response::HTTP_FORBIDDEN);
             }
 
@@ -100,24 +102,20 @@ final class SocioPortalController extends AbstractController
                 return $this->json(['error' => 'Ya existe un usuario para este socio o email'], Response::HTTP_CONFLICT);
             }
 
+            $passwordHash = $this->usuarios->hashPassword($password);
             $this->connection->executeStatement(
                 'INSERT INTO cnb_app.socio_acceso (numero_socio, email, password_hash)
                  VALUES (?, ?, ?)',
                 [
                     $socio['numero_socio'],
                     strtolower($email),
-                    password_hash($password, PASSWORD_DEFAULT),
+                    $passwordHash,
                 ]
             );
 
-            $token = bin2hex(random_bytes(32));
-            $expiresAt = (new \DateTimeImmutable('+30 days'))->format('c');
-
-            $this->connection->insert('cnb_app.socio_sesiones', [
-                'numero_socio' => $socio['numero_socio'],
-                'token' => $token,
-                'expires_at' => $expiresAt,
-            ]);
+            $session = $this->issueSocioSession((int) $socio['numero_socio'], strtolower($email), $passwordHash);
+            $token = $session['token'];
+            $expiresAt = $session['expires_at'];
 
             $row = $this->connection->fetchAssociative(
                 'SELECT sa.*, s.numero_socio, s.nombre, s.apellido, s.telefono, s.documento, s.estado AS socio_estado
@@ -163,18 +161,17 @@ final class SocioPortalController extends AbstractController
                 return $this->json(['error' => 'Credenciales invalidas'], Response::HTTP_UNAUTHORIZED);
             }
 
-            if (($row['socio_estado'] ?? '') !== 'activo') {
+            if (!in_array($row['socio_estado'] ?? '', ['activo', 'AO', 'MR', 'AA', 'VO', 'AE', 'HO'], true)) {
                 return $this->json(['error' => 'Socio no activo'], Response::HTTP_FORBIDDEN);
             }
 
-            $token = bin2hex(random_bytes(32));
-            $expiresAt = (new \DateTimeImmutable('+30 days'))->format('c');
-
-            $this->connection->insert('cnb_app.socio_sesiones', [
-                'numero_socio' => $row['numero_socio'],
-                'token' => $token,
-                'expires_at' => $expiresAt,
-            ]);
+            $session = $this->issueSocioSession(
+                (int) $row['numero_socio'],
+                strtolower((string) $row['email']),
+                (string) $row['password_hash'],
+            );
+            $token = $session['token'];
+            $expiresAt = $session['expires_at'];
 
             return $this->json([
                 'data' => [
@@ -267,10 +264,16 @@ final class SocioPortalController extends AbstractController
                 return $this->json(['error' => 'Clave actual incorrecta'], Response::HTTP_UNAUTHORIZED);
             }
 
+            $passwordHash = $this->usuarios->hashPassword($next);
             $this->connection->update('cnb_app.socio_acceso', [
-                'password_hash' => password_hash($next, PASSWORD_DEFAULT),
+                'password_hash' => $passwordHash,
                 'updated_at' => date('c'),
             ], ['numero_socio' => $socio['numero_socio']]);
+
+            $usuario = $this->usuarios->findByUsername((string) ($socio['email'] ?? ''));
+            if ($usuario) {
+                $this->usuarios->updatePassword((int) $usuario['id'], $next);
+            }
 
             return $this->json(['data' => ['ok' => true]]);
         } catch (DbalException $exception) {
@@ -977,6 +980,32 @@ final class SocioPortalController extends AbstractController
     }
 
     /**
+     * Token nuevo en usuarios (hash, 24 h). Si la migracion 016 no corrio, cae a socio_sesiones.
+     *
+     * @return array{token: string, expires_at: string}
+     */
+    private function issueSocioSession(int $numeroSocio, string $email, string $passwordHash): array
+    {
+        $usuarioId = $this->usuarios->ensureUser($email, $passwordHash, 'socio', $numeroSocio, null);
+        if ($usuarioId !== null) {
+            $session = $this->usuarios->issueToken($usuarioId);
+            if ($session !== null) {
+                return $session;
+            }
+        }
+
+        $token = bin2hex(random_bytes(32));
+        $expiresAt = (new \DateTimeImmutable('+' . UsuarioAuthService::TOKEN_TTL_SECONDS . ' seconds'))->format('c');
+        $this->connection->insert('cnb_app.socio_sesiones', [
+            'numero_socio' => $numeroSocio,
+            'token' => $token,
+            'expires_at' => $expiresAt,
+        ]);
+
+        return ['token' => $token, 'expires_at' => $expiresAt];
+    }
+
+    /**
      * @return array<string, mixed>|JsonResponse
      */
     private function authenticate(Request $request): array|JsonResponse
@@ -992,15 +1021,27 @@ final class SocioPortalController extends AbstractController
         }
 
         try {
-            $row = $this->connection->fetchAssociative(
-                'SELECT sa.*, s.numero_socio, s.nombre, s.apellido, s.telefono, s.documento,
-                        s.estado AS socio_estado, s.foto_perfil
-                 FROM cnb_app.socio_sesiones ss
-                 INNER JOIN cnb_app.socio_acceso sa ON sa.numero_socio = ss.numero_socio
-                 INNER JOIN cnb_app.socios s ON s.numero_socio = ss.numero_socio
-                 WHERE ss.token = ? AND ss.expires_at > NOW()',
-                [$token]
-            );
+            $usuario = $this->usuarios->userFromToken($token);
+            if ($usuario && ($usuario['rol'] ?? '') === 'socio' && !empty($usuario['numero_socio'])) {
+                $row = $this->connection->fetchAssociative(
+                    'SELECT sa.*, s.numero_socio, s.nombre, s.apellido, s.telefono, s.documento,
+                            s.estado AS socio_estado, s.foto_perfil
+                     FROM cnb_app.socios s
+                     LEFT JOIN cnb_app.socio_acceso sa ON sa.numero_socio = s.numero_socio
+                     WHERE s.numero_socio = ?',
+                    [$usuario['numero_socio']]
+                );
+            } else {
+                $row = $this->connection->fetchAssociative(
+                    'SELECT sa.*, s.numero_socio, s.nombre, s.apellido, s.telefono, s.documento,
+                            s.estado AS socio_estado, s.foto_perfil
+                     FROM cnb_app.socio_sesiones ss
+                     INNER JOIN cnb_app.socio_acceso sa ON sa.numero_socio = ss.numero_socio
+                     INNER JOIN cnb_app.socios s ON s.numero_socio = ss.numero_socio
+                     WHERE ss.token = ? AND ss.expires_at > NOW()',
+                    [$token]
+                );
+            }
 
             if (!$row) {
                 return $this->json(['error' => 'Sesion expirada o invalida'], Response::HTTP_UNAUTHORIZED);

@@ -140,6 +140,7 @@ final class AdminAuthSubscriber implements EventSubscriberInterface
     {
         return $path === '/admin'
             || $path === '/admin/cuenta'
+            || $path === '/admin/perfil-foto'
             || $path === '/admin/mis-datos'
             || $path === '/admin/timbre'
             || str_starts_with($path, '/admin/timbre/')

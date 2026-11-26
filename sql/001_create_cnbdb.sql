@@ -226,7 +226,6 @@ RETURNS TRIGGER AS $$
 DECLARE
     dias_anuales INTEGER;
     reserva_activa BOOLEAN;
-    embarcacion_socio INTEGER;
     embarcacion_eslora NUMERIC(5,2);
     espacio_eslora_max NUMERIC(5,2);
 BEGIN
@@ -238,11 +237,16 @@ BEGIN
         RAISE EXCEPTION 'Una reserva de varadero no puede superar 15 dias';
     END IF;
 
-    SELECT numero_socio, eslora_m INTO embarcacion_socio, embarcacion_eslora
+    SELECT eslora_m INTO embarcacion_eslora
     FROM embarcaciones
     WHERE id = NEW.embarcacion_id;
 
-    IF embarcacion_socio IS DISTINCT FROM NEW.numero_socio THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM socio_embarcacion se
+        WHERE se.embarcacion_id = NEW.embarcacion_id
+          AND se.numero_socio = NEW.numero_socio
+    ) THEN
         RAISE EXCEPTION 'La embarcacion debe pertenecer al socio que reserva';
     END IF;
 

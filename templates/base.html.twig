@@ -58,6 +58,9 @@
                         <div class="cnb-user">
                             <a class="cnb-profile" href="{{ path('admin_cuenta') }}">
                                 <span class="cnb-profile-icon" aria-hidden="true">
+                                    {% if perfil == 'socio' %}
+                                        <img class="cnb-profile-photo" src="{{ path('admin_perfil_foto') }}" alt="" width="42" height="42" onerror="this.remove()">
+                                    {% endif %}
                                     <svg viewBox="0 0 24 24" width="28" height="28">
                                         <circle cx="12" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
                                         <path d="M5 19.2c1.4-3 3.8-4.5 7-4.5s5.6 1.5 7 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>

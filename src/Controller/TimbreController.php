@@ -81,7 +81,7 @@ final class TimbreController extends AbstractController
             ], Response::HTTP_SERVICE_UNAVAILABLE);
         }
 
-        if ($row === false || (string) $row['estado'] !== 'activo' || (int) $row['pin'] !== (int) $pin) {
+        if ($row === false || !in_array((string) $row['estado'], ['activo', 'AO', 'MR', 'AA', 'VO', 'AE', 'HO'], true) || (int) $row['pin'] !== (int) $pin) {
             return $this->page('login', [
                 'error' => 'Credenciales inválidas. Revisá socio y PIN.',
             ], Response::HTTP_UNAUTHORIZED);

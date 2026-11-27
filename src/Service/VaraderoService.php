@@ -390,6 +390,11 @@ final class VaraderoService
             return ['ok' => false, 'error' => 'Socio, embarcacion, espacio y fechas son obligatorios', 'status' => 400];
         }
 
+        $habilitacion = SocioElegibilidad::rechazo($this->connection, $numeroSocio);
+        if ($habilitacion !== null) {
+            return ['ok' => false, 'error' => $habilitacion, 'status' => 403];
+        }
+
         $bloqueante = $this->reservaBloqueanteDeSocio($numeroSocio);
         if ($bloqueante !== null && ($excludeReservaId === null || (int) $bloqueante['id'] !== $excludeReservaId)) {
             return [

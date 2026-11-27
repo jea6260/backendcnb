@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Service\ResourceRegistry;
+use App\Service\SocioElegibilidad;
 use App\Service\UsuarioAuthService;
 use App\Service\VaraderoService;
 use Doctrine\DBAL\ArrayParameterType;
@@ -261,6 +262,12 @@ final class ApiController extends AbstractController
 
         try {
             $payload = $this->registry->payloadFor($definition, $this->jsonBody($request));
+            if (in_array($resource, ['socio-embarcacion', 'embarcaciones'], true) && !empty($payload['numero_socio'])) {
+                $habilitacion = SocioElegibilidad::rechazo($this->connection, (int) $payload['numero_socio']);
+                if ($habilitacion !== null) {
+                    return $this->json(['error' => $habilitacion], Response::HTTP_FORBIDDEN);
+                }
+            }
             $row = $this->insertReturning($definition['table'], $payload);
             $this->syncEmbarcacionTitular($resource, $row);
 

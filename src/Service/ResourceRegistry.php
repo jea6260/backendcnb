@@ -84,7 +84,7 @@ final class ResourceRegistry
                     ],
                 ],
                 'fields' => [
-                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL]],
+                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'help' => 'Activo, vitalicio o cónyuge, tenga o no embarcación.', 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL, 'solo_habilitados' => true]],
                     'embarcacion_id' => ['label' => 'Embarcacion', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'embarcaciones', 'label' => "nombre || COALESCE(' - ' || matricula, '')"]],
                     'rol' => ['label' => 'Rol', 'type' => 'choice', 'required' => true, 'default' => 'titular', 'list' => true, 'choices' => [
                         'titular' => 'Titular',
@@ -132,7 +132,7 @@ final class ResourceRegistry
                         'type' => 'relation',
                         'list' => true,
                         'help' => 'Preferir vinculos en Socios ↔ Embarcaciones. Se mantiene por compatibilidad.',
-                        'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL],
+                        'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL, 'solo_habilitados' => true],
                     ],
                     'tipo' => ['label' => 'Tipo', 'type' => 'text', 'required' => true, 'default' => 'velero', 'list' => true],
                     'modelo' => ['label' => 'Modelo', 'type' => 'text', 'list' => true],
@@ -247,7 +247,7 @@ final class ResourceRegistry
                 'singular' => 'Reserva de varadero',
                 'description' => 'El socio pide (pendiente). El operador confirma. El marinero marca la entrada y la vuelta a la amarra, que libera el lugar. Cupo de 15 dias por año.',
                 'fields' => [
-                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL]],
+                    'numero_socio' => ['label' => 'Socio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'socios', 'key' => 'numero_socio', 'label' => self::SOCIO_LABEL, 'solo_habilitados' => true]],
                     'embarcacion_id' => ['label' => 'Embarcacion', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'embarcaciones', 'label' => "nombre || COALESCE(' - ' || matricula, '')"]],
                     'espacio_id' => ['label' => 'Espacio', 'type' => 'relation', 'required' => true, 'list' => true, 'relation' => ['table' => 'espacios_varadero', 'label' => "codigo || ' (' || eslora_max_m || 'm)'"]],
                     'fecha_inicio' => ['label' => 'Fecha inicio', 'type' => 'date', 'required' => true, 'list' => true],
@@ -747,13 +747,20 @@ final class ResourceRegistry
 
         $relation = $field['relation'];
         $key = $relation['key'] ?? 'id';
-        $where = !empty($relation['active_only']) ? ' WHERE activo = TRUE' : '';
+        $where = [];
+        if (!empty($relation['active_only'])) {
+            $where[] = 'activo = TRUE';
+        }
+        if (!empty($relation['solo_habilitados'])) {
+            $where[] = 'estado IN ('.SocioElegibilidad::sqlEstados().')';
+        }
         $sql = sprintf(
-            'SELECT %s AS id, %s AS label FROM %s%s ORDER BY label ASC LIMIT 500',
+            'SELECT %s AS id, %s AS label FROM %s%s ORDER BY label ASC LIMIT %d',
             $key,
             $relation['label'],
             $relation['table'],
-            $where
+            $where === [] ? '' : ' WHERE '.implode(' AND ', $where),
+            !empty($relation['solo_habilitados']) ? 2000 : 500
         );
 
         return array_map(

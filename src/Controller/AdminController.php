@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Service\ResourceRegistry;
+use App\Service\SocioElegibilidad;
 use App\Service\UsuarioAuthService;
 use App\Service\VaraderoService;
 use Doctrine\DBAL\Connection;
@@ -210,7 +211,7 @@ final class AdminController extends AbstractController
             "SELECT numero_socio AS id,
                     apellido || ', ' || nombre || ' #' || numero_socio AS label
              FROM cnb_app.socios
-             WHERE estado NOT IN ('BA', 'baja', 'suspendido')
+             WHERE estado IN (".SocioElegibilidad::sqlEstados().")
              ORDER BY apellido ASC, nombre ASC"
         );
 
@@ -775,11 +776,14 @@ final class AdminController extends AbstractController
                 } else {
                     $data = $this->mergeUploadedImages($request, $definition, $data);
                     $payload = $this->registry->payloadFor($definition, $data, form: true);
-                    $this->connection->insert($definition['table'], $payload);
-                    $this->syncSocioFacialFromFoto($resource, $payload);
-                    $this->addFlash('success', sprintf('%s creado correctamente.', $definition['singular']));
+                    $error = $this->rechazoSocioOperacion($resource, $payload, null);
+                    if ($error === null) {
+                        $this->connection->insert($definition['table'], $payload);
+                        $this->syncSocioFacialFromFoto($resource, $payload);
+                        $this->addFlash('success', sprintf('%s creado correctamente.', $definition['singular']));
 
-                    return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                        return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                    }
                 }
             } catch (DbalException $exception) {
                 $error = $exception->getPrevious()?->getMessage() ?? $exception->getMessage();
@@ -849,11 +853,14 @@ final class AdminController extends AbstractController
                 } else {
                     $data = $this->mergeUploadedImages($request, $definition, $data);
                     $payload = $this->registry->payloadFor($definition, $data, patch: true, form: true);
-                    $this->connection->update($definition['table'], $payload, [$pk => $id]);
-                    $this->syncSocioFacialFromFoto($resource, $payload + ['numero_socio' => $id]);
-                    $this->addFlash('success', sprintf('%s actualizado correctamente.', $definition['singular']));
+                    $error = $this->rechazoSocioOperacion($resource, $payload, $row);
+                    if ($error === null) {
+                        $this->connection->update($definition['table'], $payload, [$pk => $id]);
+                        $this->syncSocioFacialFromFoto($resource, $payload + ['numero_socio' => $id]);
+                        $this->addFlash('success', sprintf('%s actualizado correctamente.', $definition['singular']));
 
-                    return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                        return $this->redirectToRoute('admin_resource_index', ['resource' => $resource]);
+                    }
                 }
             } catch (DbalException $exception) {
                 $error = $exception->getPrevious()?->getMessage() ?? $exception->getMessage();
@@ -952,6 +959,27 @@ final class AdminController extends AbstractController
         }
 
         return $data;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed>|null $anterior
+     */
+    private function rechazoSocioOperacion(string $resource, array $payload, ?array $anterior): ?string
+    {
+        if (!in_array($resource, ['socio-embarcacion', 'embarcaciones'], true)) {
+            return null;
+        }
+        if (!array_key_exists('numero_socio', $payload) || $payload['numero_socio'] === null || $payload['numero_socio'] === '') {
+            return null;
+        }
+        $nuevo = (int) $payload['numero_socio'];
+        $previo = (int) ($anterior['numero_socio'] ?? 0);
+        if ($nuevo === $previo) {
+            return null;
+        }
+
+        return SocioElegibilidad::rechazo($this->connection, $nuevo);
     }
 
     /**

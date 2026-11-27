@@ -75,6 +75,9 @@
                                         <option value="{{ option.id }}" {% if value == option.id %}selected{% endif %}>{{ option.label }}</option>
                                     {% endfor %}
                                 </select>
+                                {% if field.help is defined %}
+                                    <div class="form-text">{{ field.help }}</div>
+                                {% endif %}
                             {% elseif field.type == 'textarea' %}
                                 <textarea class="form-control" id="{{ name }}" name="{{ name }}" rows="4" {% if field.required|default(false) %}required{% endif %}>{{ value }}</textarea>
                             {% else %}

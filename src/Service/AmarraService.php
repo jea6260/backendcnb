@@ -119,6 +119,10 @@ final class AmarraService
         string $observaciones,
         bool $cambioEmbarcacion = false,
     ): array {
+        $habilitacion = SocioElegibilidad::rechazo($this->connection, $numeroSocio);
+        if ($habilitacion !== null) {
+            return ['ok' => false, 'error' => $habilitacion];
+        }
         if (!in_array($modalidad, ['compra', 'alquiler', 'ampliacion'], true)) {
             return ['ok' => false, 'error' => 'La modalidad es compra, alquiler o ampliación.'];
         }
